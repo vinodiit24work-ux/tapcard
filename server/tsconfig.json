@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
+    "lib": [
+      "ES2023"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -13,8 +15,16 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": [".", "../prisma/seed.ts"],
-  "exclude": ["generated"]
+  "include": [
+    ".",
+    "../prisma/seed.ts",
+    "../api"
+  ],
+  "exclude": [
+    "generated"
+  ]
 }

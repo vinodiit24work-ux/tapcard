@@ -1,6 +1,7 @@
 import type { ReviewCopy, Suggestion } from '@/types/review'
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+/** Empty in production: the API is served from the same origin as the site. */
+const API = import.meta.env.VITE_API_URL ?? ''
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}/api${path}`, {

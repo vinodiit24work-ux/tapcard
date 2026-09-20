@@ -84,10 +84,16 @@ export async function revokeSession(refreshToken: string) {
 export const revokeAllSessions = (userId: string) =>
   prisma.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })
 
+/**
+ * The API and website share an origin in production, so Lax is enough and avoids the
+ * third-party-cookie problems that SameSite=None runs into in modern browsers.
+ * Set CROSS_SITE_COOKIES=true if the API is ever hosted on a separate domain.
+ */
+const crossSite = process.env.CROSS_SITE_COOKIES === 'true'
 const cookieBase = {
   httpOnly: true,
   secure: isProd,
-  sameSite: isProd ? ('none' as const) : ('lax' as const),
+  sameSite: crossSite ? ('none' as const) : ('lax' as const),
   path: '/',
 }
 
