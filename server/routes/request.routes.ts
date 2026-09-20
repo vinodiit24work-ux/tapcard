@@ -10,8 +10,11 @@ import {
   requestInclude, reviewLink,
 } from '../services/request.service.js'
 import {
-  buildCardSchema, connectGoogleSchema, sendCardSchema, updateRequestSchema, updateStatusSchema,
+  adminSuggestionsSchema, buildCardSchema, connectGoogleSchema, sendCardSchema,
+  updateRequestSchema, updateStatusSchema,
 } from '../validators/request.validators.js'
+import { updateBusinessSchema, updateCardSchema } from '../validators/card.validators.js'
+import type { Prisma } from '../generated/prisma/client.js'
 import type { SectionKind } from '../generated/prisma/enums.js'
 
 export const requestRouter = Router()
@@ -152,6 +155,68 @@ requestRouter.post(
 
     const r = await prisma.cardRequest.findUniqueOrThrow({ where: { id }, include: requestInclude })
     res.status(201).json({ request: shape(r) })
+  }),
+)
+
+/**
+ * Editing the customer's card. These are scoped to the request's own business, so an
+ * admin who owns several built cards always edits the one they are looking at rather
+ * than whichever happens to be theirs first.
+ */
+async function businessOf(requestId: string) {
+  const r = await prisma.cardRequest.findUnique({ where: { id: requestId }, select: { businessId: true } })
+  if (!r?.businessId) throw ApiError.badRequest('Create the card before editing it.')
+  return r.businessId
+}
+
+requestRouter.patch(
+  '/:id/business',
+  validate(updateBusinessSchema),
+  handler(async (req, res) => {
+    const businessId = await businessOf(String(req.params.id))
+    await prisma.business.update({ where: { id: businessId }, data: req.body as Record<string, unknown> })
+    const r = await prisma.cardRequest.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: requestInclude })
+    res.json({ request: shape(r) })
+  }),
+)
+
+requestRouter.patch(
+  '/:id/card',
+  validate(updateCardSchema),
+  handler(async (req, res) => {
+    const businessId = await businessOf(String(req.params.id))
+    const body = req.body as { appearance?: Prisma.InputJsonObject; bookingUrl?: string; bookingLabel?: string; menuUrl?: string; showBranding?: boolean }
+    const card = await prisma.digitalCard.findUniqueOrThrow({ where: { businessId } })
+    await prisma.digitalCard.update({
+      where: { businessId },
+      data: {
+        ...(body.appearance ? { appearance: { ...(card.appearance as Prisma.InputJsonObject), ...body.appearance } as Prisma.InputJsonObject } : {}),
+        ...(body.bookingUrl !== undefined ? { bookingUrl: body.bookingUrl } : {}),
+        ...(body.bookingLabel !== undefined ? { bookingLabel: body.bookingLabel } : {}),
+        ...(body.menuUrl !== undefined ? { menuUrl: body.menuUrl } : {}),
+        ...(body.showBranding !== undefined ? { showBranding: body.showBranding } : {}),
+      },
+    })
+    const r = await prisma.cardRequest.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: requestInclude })
+    res.json({ request: shape(r) })
+  }),
+)
+
+/** Replaces the whole phrase list, which is how the admin screen edits them. */
+requestRouter.put(
+  '/:id/suggestions',
+  validate(adminSuggestionsSchema),
+  handler(async (req, res) => {
+    const businessId = await businessOf(String(req.params.id))
+    const { suggestions } = req.body as { suggestions: { text: string; enabled: boolean }[] }
+    await prisma.$transaction([
+      prisma.suggestedReview.deleteMany({ where: { businessId } }),
+      prisma.suggestedReview.createMany({
+        data: suggestions.map((s, position) => ({ businessId, text: s.text, enabled: s.enabled, position })),
+      }),
+    ])
+    const r = await prisma.cardRequest.findUniqueOrThrow({ where: { id: String(req.params.id) }, include: requestInclude })
+    res.json({ request: shape(r) })
   }),
 )
 

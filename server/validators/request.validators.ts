@@ -67,3 +67,10 @@ export const customerApprovalSchema = z.object({
   decision: z.enum(['approve', 'changes']),
   note: z.string().trim().max(800).optional(),
 })
+
+/** The admin phrase editor sends the whole list. */
+export const adminSuggestionsSchema = z.object({
+  suggestions: z
+    .array(z.object({ text: z.string().trim().min(4, 'Write at least a few words.').max(300), enabled: z.boolean().default(true) }))
+    .max(12),
+})

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, Badge } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/Table'
 import { EmptyState, ErrorState, Modal, Skeleton } from '@/components/ui/Feedback'
-import { Input, Select } from '@/components/ui/Form'
+import { Input, Select, Switch } from '@/components/ui/Form'
 import { PhoneFrame } from '@/components/card/PhoneFrame'
 import { QRImage } from '@/components/card/QRImage'
 import { ReviewExperience } from '@/features/review/ReviewExperience'
@@ -149,7 +149,7 @@ function RequestDrawer({
   toast: (m: string, t?: 'success' | 'error' | 'info') => void
 }) {
   const [r, setR] = useState(request)
-  const [tab, setTab] = useState<'details' | 'google' | 'final'>('details')
+  const [tab, setTab] = useState<'details' | 'design' | 'google' | 'final'>('details')
   const [busy, setBusy] = useState(false)
   const [slug, setSlug] = useState(slugify(request.businessName))
   const [template, setTemplate] = useState('restaurant')
@@ -181,7 +181,7 @@ function RequestDrawer({
   return (
     <Modal open onClose={onClose} size="xl" title={r.businessName} description={`${r.reference} · ${r.contactName} · ${r.phone}`}>
       <div className="mb-5 flex gap-1.5">
-        {([['details', 'Customer & card'], ['google', 'Google review'], ['final', 'Final card']] as const).map(([id, label]) => (
+        {([['details', 'Customer & card'], ['design', 'Design & phrases'], ['google', 'Google review'], ['final', 'Final card']] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -195,6 +195,7 @@ function RequestDrawer({
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 space-y-5">
           {tab === 'details' && <DetailsTab r={r} busy={busy} slug={slug} setSlug={setSlug} template={template} setTemplate={setTemplate} run={run} />}
+          {tab === 'design' && <DesignTab r={r} busy={busy} run={run} toast={toast} />}
           {tab === 'google' && <GoogleTab r={r} busy={busy} run={run} toast={toast} />}
           {tab === 'final' && <FinalTab r={r} busy={busy} run={run} sent={sent} setSent={setSent} toast={toast} setBusy={setBusy} />}
         </div>
@@ -305,6 +306,112 @@ function DetailsTab({
               ))}
             </ol>
           )}
+        </div>
+      </Card>
+    </>
+  )
+}
+
+/* ----------------------------------------------------------------- design -- */
+
+function DesignTab({
+  r, busy, run, toast,
+}: {
+  r: CardRequest; busy: boolean
+  run: (fn: () => Promise<CardRequest>, ok: string) => void
+  toast: (m: string, t?: 'success' | 'error' | 'info') => void
+}) {
+  const [phrases, setPhrases] = useState(
+    r.business?.suggestions.map((s) => ({ text: s.text, enabled: s.enabled !== false })) ?? [],
+  )
+  const [primary, setPrimary] = useState('#5b4bff')
+
+  if (!r.businessId) {
+    return <EmptyState icon={<Sparkles className="size-5" />} title="Create the card first" description="Design and phrases are saved against the customer's card." />
+  }
+
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...phrases]
+    const j = i + dir
+    if (j < 0 || j >= next.length) return
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setPhrases(next)
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader title="Logo & branding" description="Shown at the top of the customer's review page" />
+        <div className="space-y-4 p-5">
+          <div className="flex items-center gap-3">
+            {r.business?.logoUrl ? (
+              <img src={r.business.logoUrl} alt="" className="size-14 rounded-xl object-cover ring-1 ring-ink-200" />
+            ) : (
+              <div className="flex size-14 items-center justify-center rounded-xl bg-ink-100 text-[11px] text-ink-400">None</div>
+            )}
+            <label className="cursor-pointer rounded-lg border border-ink-200 bg-white px-3 py-2 text-[13px] font-medium text-ink-700 hover:bg-ink-50">
+              Upload logo
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  if (f.size > 2 * 1024 * 1024) return toast('Image must be under 2MB', 'error')
+                  const reader = new FileReader()
+                  reader.onload = () => run(() => requestApi.updateBusiness(r.id, { logoUrl: String(reader.result) }), 'Logo saved')
+                  reader.readAsDataURL(f)
+                }}
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <Input label="Brand colour" value={primary} onChange={(e) => setPrimary(e.target.value)} className="w-40 [&_input]:font-mono [&_input]:uppercase" />
+            <Button size="sm" variant="secondary" loading={busy} onClick={() => run(() => requestApi.updateCard(r.id, { appearance: { primary, themeId: 'custom' } }), 'Colour saved')}>
+              Apply colour
+            </Button>
+            <a href="/dashboard/card-builder" className="ml-auto text-[13px] font-medium text-brand-700 hover:underline">Full design editor →</a>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title={`Suggested review phrases (${phrases.length})`} description="Customers tap one to start, then edit it in their own words." />
+        <div className="space-y-2 p-5">
+          {phrases.map((p, i) => (
+            <div key={i} className="flex items-start gap-2 rounded-xl border border-ink-200 p-2.5">
+              <div className="flex flex-col">
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="rounded px-1 text-ink-400 hover:bg-ink-100 disabled:opacity-30" aria-label="Move up">↑</button>
+                <button onClick={() => move(i, 1)} disabled={i === phrases.length - 1} className="rounded px-1 text-ink-400 hover:bg-ink-100 disabled:opacity-30" aria-label="Move down">↓</button>
+              </div>
+              <textarea
+                value={p.text}
+                onChange={(e) => setPhrases(phrases.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+                rows={2}
+                maxLength={300}
+                className="min-w-0 flex-1 resize-none rounded-lg border border-ink-200 px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none"
+              />
+              <div className="flex shrink-0 items-center gap-1">
+                <Switch checked={p.enabled} label="Enabled" onChange={(v) => setPhrases(phrases.map((x, j) => (j === i ? { ...x, enabled: v } : x)))} />
+                <button onClick={() => setPhrases(phrases.filter((_, j) => j !== i))} aria-label="Delete" className="rounded-lg p-1.5 text-ink-400 hover:bg-red-50 hover:text-red-600"><X className="size-4" /></button>
+              </div>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button size="sm" variant="secondary" disabled={phrases.length >= 12} onClick={() => setPhrases([...phrases, { text: '', enabled: true }])}>Add phrase</Button>
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={phrases.some((p) => p.text.trim().length < 4)}
+              onClick={() => run(() => requestApi.setSuggestions(r.id, phrases.map((p) => ({ text: p.text.trim(), enabled: p.enabled }))), 'Phrases saved')}
+            >
+              Save phrases
+            </Button>
+          </div>
+          <p className="text-[12px] leading-relaxed text-ink-500">
+            Nothing is ever posted to Google for the customer — they choose or write their review and continue there themselves.
+          </p>
         </div>
       </Card>
     </>
