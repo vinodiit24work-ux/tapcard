@@ -45,7 +45,7 @@ function Nav() {
           ) : (
             <>
               <ButtonLink to="/login" variant="ghost">Log in</ButtonLink>
-              <ButtonLink to="/register">Create free card</ButtonLink>
+              <ButtonLink to="/get-card">Get my TapCard</ButtonLink>
             </>
           )}
         </div>

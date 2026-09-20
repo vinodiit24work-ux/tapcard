@@ -148,3 +148,97 @@ export interface AnalyticsSummary {
 export const analyticsApi = {
   summary: (range: string) => api<AnalyticsSummary>(`/analytics/summary?range=${range}`),
 }
+
+/* ------------------------------------------------- admin: card requests -- */
+
+export const REQUEST_FLOW = [
+  'NEW_REQUEST', 'CONTACT_CUSTOMER', 'ORDER_CONFIRMED', 'CREATING_CARD', 'GOOGLE_CONNECTED',
+  'PREVIEW_READY', 'CUSTOMER_APPROVAL', 'REVISION_REQUESTED', 'APPROVED', 'FINAL_CARD_READY',
+  'DIGITAL_CARD_SENT', 'PHYSICAL_CARD_PREPARING', 'SHIPPED', 'DELIVERED', 'CANCELLED',
+] as const
+export type RequestStatus = (typeof REQUEST_FLOW)[number]
+
+export const STATUS_LABEL: Record<RequestStatus, string> = {
+  NEW_REQUEST: 'New Request',
+  CONTACT_CUSTOMER: 'Contact Customer',
+  ORDER_CONFIRMED: 'Order Confirmed',
+  CREATING_CARD: 'Creating Card',
+  GOOGLE_CONNECTED: 'Google Review Connected',
+  PREVIEW_READY: 'Preview Ready',
+  CUSTOMER_APPROVAL: 'Customer Approval',
+  REVISION_REQUESTED: 'Revision Requested',
+  APPROVED: 'Approved',
+  FINAL_CARD_READY: 'Final Card Ready',
+  DIGITAL_CARD_SENT: 'Digital Card Sent',
+  PHYSICAL_CARD_PREPARING: 'Physical Card Preparing',
+  SHIPPED: 'Shipped',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+}
+
+export interface CardRequest {
+  id: string
+  reference: string
+  businessName: string
+  contactName: string
+  phone: string
+  whatsapp: string
+  email: string
+  category: string
+  city: string
+  address: string
+  wantsPhysical: boolean
+  wantsDigital: boolean
+  notes: string | null
+  status: RequestStatus
+  businessId: string | null
+  createdAt: string
+  business: null | {
+    id: string
+    name: string
+    logoUrl: string | null
+    reviewUrl: string
+    googleName: string | null
+    googleAddress: string | null
+    googleConnectedAt: string | null
+    googleVerifiedBy: string | null
+    suggestions: Suggestion[]
+    card: null | { slug: string; status: string; approvalStatus: string; approvalSentAt: string | null; approvedAt: string | null; revisionNote: string | null }
+  }
+  events: { id: string; status: RequestStatus; note: string | null; createdAt: string }[]
+  readiness: { ready: boolean; checks: { id: string; label: string; done: boolean }[] }
+  links: { review: string; card: string } | null
+}
+
+export const requestApi = {
+  list: (q: { status?: string; q?: string } = {}) => {
+    const p = new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])
+    return api<{ requests: CardRequest[]; counts: Record<string, number> }>(`/admin/requests?${p}`)
+  },
+  get: (id: string) => api<{ request: CardRequest; card: ServerCard | null }>(`/admin/requests/${id}`),
+  update: (id: string, patch: Record<string, unknown>) =>
+    api<{ request: CardRequest }>(`/admin/requests/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then((r) => r.request),
+  setStatus: (id: string, status: RequestStatus, note?: string) =>
+    api<{ request: CardRequest }>(`/admin/requests/${id}/status`, { method: 'POST', body: JSON.stringify({ status, note }) }).then((r) => r.request),
+  build: (id: string, body: { slug: string; templateKey?: string }) =>
+    api<{ request: CardRequest }>(`/admin/requests/${id}/build`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.request),
+  connectGoogle: (id: string, body: { reviewUrl: string; placeId?: string; googleName?: string; googleAddress?: string; verified: true }) =>
+    api<{ request: CardRequest }>(`/admin/requests/${id}/google`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.request),
+  generate: (id: string) =>
+    api<{ request: CardRequest }>(`/admin/requests/${id}/generate`, { method: 'POST' }).then((r) => r.request),
+  send: (id: string, channel: 'whatsapp' | 'email' | 'link') =>
+    api<{ link: string; message: string; whatsapp: string | null; mailto: string | null; reviewLink: string; cardLink: string }>(
+      `/admin/requests/${id}/send`,
+      { method: 'POST', body: JSON.stringify({ channel }) },
+    ),
+}
+
+/** Public: the "Get My TapCard" form and the customer's approval screen. */
+export const publicApi = {
+  submitRequest: (body: Record<string, unknown>) =>
+    api<{ request: { reference: string; businessName: string } }>('/public/requests', { method: 'POST', body: JSON.stringify(body) }),
+  approval: (token: string) =>
+    api<{ card: Record<string, unknown>; approval: { status: string; note: string | null }; links: { review: string; card: string } }>(`/public/approve/${token}`),
+  decide: (token: string, decision: 'approve' | 'changes', note?: string) =>
+    api<{ ok: boolean; status: string }>('/public/approve', { method: 'POST', body: JSON.stringify({ token, decision, note }) }),
+}

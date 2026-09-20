@@ -1,11 +1,12 @@
 import { Navigate } from 'react-router-dom'
-import { Boxes, Building2, CreditCard, LayoutDashboard, LayoutTemplate, LifeBuoy, Package, Percent, Settings, Ticket, Users } from 'lucide-react'
+import { Boxes, Building2, CreditCard, Inbox, LayoutDashboard, LayoutTemplate, LifeBuoy, Package, Percent, Settings, Ticket, Users } from 'lucide-react'
 import { AppShell, type NavItem } from './AppShell'
 import { SessionLoading } from './DashboardLayout'
 import { useAuth } from '@/store/auth'
 
 const items: NavItem[] = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/admin/requests', label: 'Card Requests', icon: Inbox },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/businesses', label: 'Businesses', icon: Building2 },
   { to: '/admin/orders', label: 'Orders', icon: Package },

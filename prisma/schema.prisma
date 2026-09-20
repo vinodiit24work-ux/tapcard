@@ -35,6 +35,7 @@ model User {
   updatedAt         DateTime  @updatedAt
 
   businesses    Business[]
+  assignedRequests CardRequest[]
   sessions      Session[]
   orders        Order[]
   subscription  Subscription?
@@ -85,6 +86,14 @@ model Business {
   logoUrl    String?
   coverUrl   String?
   gstin      String?
+
+  /// --- Google connection. Only ever set from a verified selection or a pasted,
+  /// admin-confirmed URL — never inferred from the business name. ---
+  googlePlaceId     String?
+  googleName        String?
+  googleAddress     String?
+  googleConnectedAt DateTime?
+  googleVerifiedBy  String?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -93,6 +102,7 @@ model Business {
   card        DigitalCard?
   suggestions SuggestedReview[]
   reviews     Review[]
+  cardRequest CardRequest?
   socialLinks SocialLink[]
   customLinks CustomLink[]
   services    Service[]
@@ -107,6 +117,13 @@ model Business {
 enum CardStatus {
   DRAFT
   PUBLISHED
+}
+
+enum ApprovalStatus {
+  NOT_SENT
+  AWAITING_CUSTOMER
+  APPROVED
+  CHANGES_REQUESTED
 }
 
 model DigitalCard {
@@ -136,6 +153,15 @@ model DigitalCard {
   /// Secondary business details are available but never block the review.
   showBusinessInfo  Boolean @default(true)
   publishedAt DateTime?
+
+  /// --- Customer approval of the finished card. The token is the customer's only
+  /// way in: they never sign in, and it grants nothing beyond approving this card. ---
+  approvalStatus ApprovalStatus @default(NOT_SENT)
+  approvalToken  String?        @unique
+  approvalSentAt DateTime?
+  approvedAt     DateTime?
+  revisionNote   String?
+
   deletedAt   DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -328,6 +354,71 @@ model Review {
   @@index([businessId, rating])
   @@index([businessId, status])
   @@map("reviews")
+}
+
+/// Where a customer request sits in the fulfilment pipeline.
+enum RequestStatus {
+  NEW_REQUEST
+  CONTACT_CUSTOMER
+  ORDER_CONFIRMED
+  CREATING_CARD
+  GOOGLE_CONNECTED
+  PREVIEW_READY
+  CUSTOMER_APPROVAL
+  REVISION_REQUESTED
+  APPROVED
+  FINAL_CARD_READY
+  DIGITAL_CARD_SENT
+  PHYSICAL_CARD_PREPARING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+/// A "Get My TapCard" enquiry. The team builds the card on the customer's behalf,
+/// so this carries the request through to a delivered card.
+model CardRequest {
+  id           String        @id @default(uuid()) @db.Uuid
+  reference    String        @unique
+  businessName String
+  contactName  String
+  phone        String
+  whatsapp     String        @default("")
+  email        String        @default("")
+  category     String
+  city         String        @default("")
+  address      String        @default("")
+  wantsPhysical Boolean      @default(true)
+  wantsDigital  Boolean      @default(true)
+  notes        String?
+  status       RequestStatus @default(NEW_REQUEST)
+  /// Set once an admin builds the card for this request.
+  businessId   String?       @unique @db.Uuid
+  assignedToId String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  business   Business?           @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  assignedTo User?               @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  events     CardRequestEvent[]
+
+  @@index([status, createdAt])
+  @@map("card_requests")
+}
+
+/// Timeline entry: who moved a request, when, and why.
+model CardRequestEvent {
+  id        String        @id @default(uuid()) @db.Uuid
+  requestId String        @db.Uuid
+  status    RequestStatus
+  note      String?
+  actorId   String?       @db.Uuid
+  createdAt DateTime      @default(now())
+
+  request CardRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+  @@map("card_request_events")
 }
 
 model QRCode {

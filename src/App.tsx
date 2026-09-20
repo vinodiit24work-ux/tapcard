@@ -22,6 +22,7 @@ import { ForgotPassword, Login, Register, VerifyEmail } from '@/pages/auth/Auth'
 
 import { PublicCard } from '@/pages/PublicCard'
 import { ReviewPage } from '@/pages/ReviewPage'
+import { ApprovalPage } from '@/pages/ApprovalPage'
 import { NotFound } from '@/pages/NotFound'
 
 /* Authenticated areas are code-split: the public card and marketing pages should
@@ -31,6 +32,8 @@ const AdminLayout = lazy(() => import('@/layouts/AdminLayout').then((m) => ({ de
 const DashboardHome = lazy(() => import('@/pages/dashboard/Home').then((m) => ({ default: m.DashboardHome })))
 const CardBuilder = lazy(() => import('@/pages/dashboard/CardBuilder').then((m) => ({ default: m.CardBuilder })))
 const Analytics = lazy(() => import('@/pages/dashboard/Analytics').then((m) => ({ default: m.Analytics })))
+const GetCard = lazy(() => import('@/pages/marketing/GetCard').then((m) => ({ default: m.GetCard })))
+const AdminRequests = lazy(() => import('@/pages/admin/Requests').then((m) => ({ default: m.AdminRequests })))
 const SuggestedReviews = lazy(() => import('@/pages/dashboard/SuggestedReviews').then((m) => ({ default: m.SuggestedReviews })))
 const Reviews = lazy(() => import('@/pages/dashboard/Reviews').then((m) => ({ default: m.Reviews })))
 const QrPage = lazy(() => import('@/pages/dashboard/Qr').then((m) => ({ default: m.QrPage })))
@@ -84,6 +87,7 @@ export function App() {
                 <Route path="about" element={<About />} />
                 <Route path="contact" element={<Contact />} />
                 <Route path="faq" element={<Faq />} />
+                <Route path="get-card" element={<GetCard />} />
                 <Route path="privacy" element={<Privacy />} />
                 <Route path="terms" element={<Terms />} />
                 <Route path="refund-policy" element={<Refund />} />
@@ -120,6 +124,7 @@ export function App() {
               {/* Admin */}
               <Route path="admin" element={<AdminLayout />}>
                 <Route index element={<Admin.Overview />} />
+                <Route path="requests" element={<AdminRequests />} />
                 <Route path="users" element={<Admin.Users />} />
                 <Route path="businesses" element={<Admin.Businesses />} />
                 <Route path="orders" element={<Admin.Orders />} />
@@ -134,6 +139,9 @@ export function App() {
 
               {/* The QR/NFC destination: a permanent URL that opens the review experience. */}
               <Route path="review/:slug" element={<ReviewPage />} />
+
+              {/* The customer's one-time approval link. No account required. */}
+              <Route path="approve/:token" element={<ApprovalPage />} />
 
               {/* Public contact card — secondary, kept for businesses that link to it. */}
               <Route path=":slug" element={<PublicCard />} />

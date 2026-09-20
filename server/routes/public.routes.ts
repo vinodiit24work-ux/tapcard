@@ -10,6 +10,8 @@ import { reviewCardInclude, serialiseReviewCard } from '../services/review.servi
 import { deviceFrom, visitorKey } from '../services/analytics.service.js'
 import { eventSchema } from '../validators/analytics.validators.js'
 import { submitReviewSchema } from '../validators/review.validators.js'
+import { createRequestSchema, customerApprovalSchema } from '../validators/request.validators.js'
+import { cardLink, moveStatus, requestReference, reviewLink } from '../services/request.service.js'
 
 export const publicRouter = Router()
 
@@ -197,6 +199,85 @@ publicRouter.post(
       })
     }
     res.status(202).json({ ok: true })
+  }),
+)
+
+/* ----------------------------------------------------------------- intake --
+ * "Get My TapCard": a short public form. The team builds the card and comes back
+ * to the customer, so this asks only for what is needed to make that call.
+ * -------------------------------------------------------------------------- */
+
+publicRouter.post(
+  '/requests',
+  eventLimiter,
+  validate(createRequestSchema),
+  handler(async (req, res) => {
+    const body = req.body as {
+      businessName: string; contactName: string; phone: string; whatsapp: string; email: string
+      category: string; city: string; address: string; wantsPhysical: boolean; wantsDigital: boolean; notes?: string
+    }
+    const request = await prisma.cardRequest.create({
+      data: { ...body, reference: requestReference() },
+      select: { id: true, reference: true, businessName: true, createdAt: true },
+    })
+    await prisma.cardRequestEvent.create({
+      data: { requestId: request.id, status: 'NEW_REQUEST', note: 'Submitted from the website' },
+    })
+    res.status(201).json({ request: { reference: request.reference, businessName: request.businessName } })
+  }),
+)
+
+/* --------------------------------------------------------------- approval --
+ * The customer never signs in. The token in their link grants exactly one
+ * thing: seeing this card and approving it or asking for changes.
+ * -------------------------------------------------------------------------- */
+
+publicRouter.get(
+  '/approve/:token',
+  handler(async (req, res) => {
+    const card = await prisma.digitalCard.findUnique({
+      where: { approvalToken: String(req.params.token) },
+      include: reviewCardInclude,
+    })
+    if (!card) throw ApiError.notFound('That approval link is not valid. Please ask for a new one.')
+    res.set('Cache-Control', 'no-store')
+    res.json({
+      card: serialiseReviewCard(card),
+      approval: { status: card.approvalStatus, sentAt: card.approvalSentAt, approvedAt: card.approvedAt, note: card.revisionNote },
+      links: { review: reviewLink(card.slug), card: cardLink(card.slug) },
+    })
+  }),
+)
+
+publicRouter.post(
+  '/approve',
+  eventLimiter,
+  validate(customerApprovalSchema),
+  handler(async (req, res) => {
+    const { token, decision, note } = req.body as { token: string; decision: 'approve' | 'changes'; note?: string }
+    const card = await prisma.digitalCard.findUnique({
+      where: { approvalToken: token },
+      select: { id: true, businessId: true, approvalStatus: true },
+    })
+    if (!card) throw ApiError.notFound('That approval link is not valid.')
+    if (card.approvalStatus === 'APPROVED') return res.json({ ok: true, status: 'APPROVED' })
+
+    const approved = decision === 'approve'
+    await prisma.digitalCard.update({
+      where: { id: card.id },
+      data: {
+        approvalStatus: approved ? 'APPROVED' : 'CHANGES_REQUESTED',
+        approvedAt: approved ? new Date() : null,
+        revisionNote: approved ? null : (note ?? 'The customer asked for changes.'),
+      },
+    })
+
+    const request = await prisma.cardRequest.findUnique({ where: { businessId: card.businessId }, select: { id: true } })
+    if (request) {
+      await moveStatus(request.id, approved ? 'APPROVED' : 'REVISION_REQUESTED', undefined, note ?? (approved ? 'Customer approved the card' : undefined))
+    }
+
+    res.json({ ok: true, status: approved ? 'APPROVED' : 'CHANGES_REQUESTED' })
   }),
 )
 
