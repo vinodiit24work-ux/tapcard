@@ -10,7 +10,7 @@ import { QRImage } from '@/components/card/QRImage'
 import { templates } from '@/data/templates'
 import { themePresets } from '@/lib/theme'
 import { covers } from '@/lib/theme'
-import { cardUrl, slugify } from '@/lib/format'
+import { reviewUrl, slugify } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { useAuth } from '@/store/auth'
 import { useCard } from '@/store/card'
@@ -31,9 +31,9 @@ const types: { id: string; label: string; icon: LucideIcon; template: string }[]
 const stepNames = ['Business type', 'Business info', 'Contact', 'Social links', 'Template', 'Logo', 'Theme', 'Preview']
 
 export function Onboarding() {
-  useDocumentTitle('Set up your card')
+  useDocumentTitle('Set up your review card')
   const { user } = useAuth()
-  const { card, patch, patchAppearance, applyTemplate, publish } = useCard()
+  const { card, patch, patchAppearance, applyTemplate, createBusiness, save, publish } = useCard()
   const navigate = useNavigate()
   const toast = useToast()
   const [step, setStep] = useState(0)
@@ -42,6 +42,7 @@ export function Onboarding() {
   const [type, setType] = useState('')
   const [tpl, setTpl] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
 
   const slugTaken = ['tapcard', 'admin', 'login', 'pricing'].includes(card.slug)
   const canNext = useMemo(() => {
@@ -70,11 +71,21 @@ export function Onboarding() {
       return
     }
     setBusy(true)
-    setTimeout(() => {
-      publish()
-      setBusy(false)
-      setDone(true)
-    }, 1000)
+    setError('')
+    // Create the business first, then save the details gathered in the wizard, then publish.
+    createBusiness({
+      name: card.businessName,
+      category: card.category,
+      slug: card.slug,
+      tagline: card.tagline,
+      description: card.description,
+      templateKey: tpl || undefined,
+    })
+      .then(() => save())
+      .then(() => publish())
+      .then(() => setDone(true))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false))
   }
 
   const pickType = (t: (typeof types)[number]) => {
@@ -93,14 +104,14 @@ export function Onboarding() {
       <div className="flex min-h-dvh flex-col items-center justify-center bg-ink-50 px-4 py-12">
         <div className="w-full max-w-lg animate-fade-up rounded-3xl border border-ink-200 bg-white p-8 text-center shadow-card sm:p-10">
           <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><PartyPopper className="size-8" /></div>
-          <h1 className="mt-6 font-display text-3xl font-extrabold text-ink-900">Your card is live</h1>
+          <h1 className="mt-6 font-display text-3xl font-extrabold text-ink-900">Your review card is live</h1>
           <p className="mt-2 text-[15px] text-ink-500">{card.businessName} is now published and ready to share.</p>
           <div className="mt-7 flex flex-col items-center gap-4 rounded-2xl border border-ink-200 bg-ink-50 p-5">
-            <QRImage text={cardUrl(card.slug)} size={140} />
-            <a href={`/${card.slug}`} target="_blank" rel="noreferrer" className="break-all font-mono text-sm font-semibold text-brand-700 hover:underline">{cardUrl(card.slug)}</a>
+            <QRImage text={reviewUrl(card.slug)} size={140} />
+            <a href={`/review/${card.slug}`} target="_blank" rel="noreferrer" className="break-all font-mono text-sm font-semibold text-brand-700 hover:underline">{reviewUrl(card.slug)}</a>
           </div>
           <div className="mt-7 grid gap-2 sm:grid-cols-2">
-            <Button variant="secondary" size="lg" onClick={() => window.open(`/${card.slug}`, '_blank')}>View my card</Button>
+            <Button variant="secondary" size="lg" onClick={() => window.open(`/review/${card.slug}`, '_blank')}>View my review page</Button>
             <Button size="lg" onClick={() => navigate('/dashboard')} iconRight={<ArrowRight className="size-4" />}>Go to dashboard</Button>
           </div>
           <Link to="/dashboard/qr" className="mt-5 inline-block text-[14px] font-medium text-ink-600 hover:text-ink-900">Download QR & order printed cards →</Link>
@@ -149,7 +160,7 @@ export function Onboarding() {
                 <p className="mt-2 text-[15px] text-ink-500">This is what customers see first on your card.</p>
                 <div className="mt-6 space-y-4">
                   <Input label="Business name" placeholder="Royal Spice" value={card.businessName} error={errors.businessName} onChange={(e) => patch({ businessName: e.target.value, slug: slugify(e.target.value) })} />
-                  <Input label="Your card link" value={card.slug} error={errors.slug} hint={!errors.slug ? `Your card will live at ${cardUrl(card.slug || 'your-business')}` : undefined} leading={<span className="text-[13px]">tapcard.in/</span>} className="[&_input]:pl-[88px]" onChange={(e) => patch({ slug: slugify(e.target.value) })} />
+                  <Input label="Your card link" value={card.slug} error={errors.slug} hint={!errors.slug ? `Your card will live at ${reviewUrl(card.slug || 'your-business')}` : undefined} leading={<span className="text-[13px]">/review/</span>} className="[&_input]:pl-[70px]" onChange={(e) => patch({ slug: slugify(e.target.value) })} />
                   <Input label="Tagline" placeholder="Restaurant & Cafe" value={card.tagline} onChange={(e) => patch({ tagline: e.target.value })} />
                   <Textarea label="Short description" placeholder="What makes your business worth visiting?" value={card.description} onChange={(e) => patch({ description: e.target.value })} />
                 </div>
@@ -272,7 +283,7 @@ export function Onboarding() {
                   {[
                     ['Business', card.businessName],
                     ['Category', card.category],
-                    ['Card link', cardUrl(card.slug)],
+                    ['Card link', reviewUrl(card.slug)],
                     ['Phone', card.phone],
                     ['WhatsApp', card.whatsapp || '—'],
                     ['Template', templates.find((t) => t.id === tpl)?.name ?? 'Custom'],
@@ -287,6 +298,10 @@ export function Onboarding() {
               </>
             )}
           </div>
+
+          {error && (
+            <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">{error}</p>
+          )}
 
           <div className="mt-8 flex items-center justify-between gap-3">
             <Button variant="ghost" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} icon={<ArrowLeft className="size-4" />}>Back</Button>

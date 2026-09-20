@@ -17,13 +17,13 @@ import { useAuth } from '@/store/auth'
 import { useMockQuery } from '@/hooks/useMockQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/components/ui/Toast'
-import { cardUrl, inr } from '@/lib/format'
+import { inr, reviewUrl } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
 /* ---------------------------------- My Card --------------------------------- */
 
 export function MyCard() {
-  useDocumentTitle('My Card')
+  useDocumentTitle('Review Card')
   const { card, published, publish, unpublish } = useCard()
   const toast = useToast()
   const sections = card.sections.filter((s) => s.enabled)
@@ -31,11 +31,11 @@ export function MyCard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Card"
-        description={published ? 'Your card is live and scannable.' : 'Your card is a draft — publish it to go live.'}
+        title="Review Card"
+        description={published ? 'Your review card is live and scannable.' : 'Your review card is a draft — publish it to go live.'}
         action={
           <div className="flex gap-2">
-            <Button variant="secondary" icon={<ExternalLink className="size-4" />} onClick={() => window.open(`/${card.slug}`, '_blank')}>Open public card</Button>
+            <Button variant="secondary" icon={<ExternalLink className="size-4" />} onClick={() => window.open(`/review/${card.slug}`, '_blank')}>Open review page</Button>
             <ButtonLink to="/dashboard/card-builder" icon={<Palette className="size-4" />}>Customize</ButtonLink>
           </div>
         }
@@ -54,7 +54,7 @@ export function MyCard() {
                 {published ? <Badge tone="green"><span className="size-1.5 rounded-full bg-current" /> Published</Badge> : <Badge tone="amber">Draft</Badge>}
                 <span className="text-[14px] text-ink-600">{published ? 'Anyone with your link or QR can open it.' : 'Only you can see this card.'}</span>
               </div>
-              <Switch checked={published} label="Published" onChange={(v) => { v ? publish() : unpublish(); toast(v ? 'Card published' : 'Card unpublished') }} />
+              <Switch checked={published} label="Published" onChange={(v) => { void (v ? publish() : unpublish()).then(() => toast(v ? 'Review card published' : 'Review card unpublished')).catch((e: Error) => toast(e.message, 'error')) }} />
             </div>
           </Card>
 
@@ -65,7 +65,7 @@ export function MyCard() {
                 ['Business name', card.businessName],
                 ['Category', card.category],
                 ['Tagline', card.tagline || '—'],
-                ['Public URL', cardUrl(card.slug)],
+                ['Public URL', reviewUrl(card.slug)],
                 ['Phone', card.phone || '—'],
                 ['WhatsApp', card.whatsapp || '—'],
                 ['Email', card.email || '—'],
@@ -91,7 +91,7 @@ export function MyCard() {
             <Card>
               <CardHeader title="Your QR" />
               <div className="flex flex-col items-center gap-3 p-5 pt-3">
-                <QRImage text={cardUrl(card.slug)} size={120} />
+                <QRImage text={reviewUrl(card.slug)} size={120} />
                 <ButtonLink to="/dashboard/qr" size="sm" variant="secondary" full icon={<QrCode className="size-4" />}>Download</ButtonLink>
               </div>
             </Card>
@@ -218,7 +218,7 @@ export function Orders() {
             )}
             <div className="flex items-start gap-3 rounded-xl bg-brand-50 p-4 text-[13px] leading-relaxed text-brand-900">
               <QrCode className="mt-0.5 size-4 shrink-0" />
-              Every card in this order points to {cardUrl('')}{'{your-slug}'} — update your card anytime without reprinting.
+              Every card in this order points to {reviewUrl('')}{'{your-slug}'} — update your card anytime without reprinting.
             </div>
           </div>
         )}
@@ -340,7 +340,7 @@ export function Billing() {
 export function Settings() {
   useDocumentTitle('Settings')
   const { user, logout } = useAuth()
-  const { card, patch, reset } = useCard()
+  const { card, patch } = useCard()
   const toast = useToast()
   const [danger, setDanger] = useState(false)
   const [notifs, setNotifs] = useState({ scans: true, leads: true, orders: true, product: false })
@@ -365,7 +365,7 @@ export function Settings() {
           <Select label="Category" value={card.category} onChange={(e) => patch({ category: e.target.value })}>
             {['Restaurant', 'Cafe', 'Salon', 'Gym', 'Doctor', 'Clinic', 'Real Estate', 'Retail', 'Freelancer', 'Consultant'].map((c) => <option key={c}>{c}</option>)}
           </Select>
-          <Input label="Card link" value={card.slug} onChange={(e) => patch({ slug: e.target.value })} hint={cardUrl(card.slug)} />
+          <Input label="Card link" value={card.slug} onChange={(e) => patch({ slug: e.target.value })} hint={reviewUrl(card.slug)} />
           <Button onClick={() => toast('Business details saved')}>Save changes</Button>
         </div>
       </Card>
@@ -418,7 +418,7 @@ export function Settings() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setDanger(false)}>Keep my account</Button>
-            <Button variant="danger" onClick={() => { reset(); logout(); toast('Account deleted', 'info') }}>Delete everything</Button>
+            <Button variant="danger" onClick={() => { void logout(); toast('Account deletion is handled by support for now', 'info') }}>Delete everything</Button>
           </>
         }
       >

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Eye, ExternalLink, Globe, Layers, Maximize2, Monitor, Plus, RotateCcw, Save, Smartphone, Tablet, Trash2, X } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { Check, Eye, ExternalLink, Globe, Layers, Maximize2, Monitor, Palette, Plus, RotateCcw, Save, Smartphone, Tablet, Trash2, X } from 'lucide-react'
+import { Button, ButtonLink } from '@/components/ui/Button'
 import { Input, Segmented, Textarea } from '@/components/ui/Form'
 import { Badge } from '@/components/ui/Card'
-import { Modal } from '@/components/ui/Feedback'
+import { EmptyState, Modal } from '@/components/ui/Feedback'
 import { PhoneFrame } from '@/components/card/PhoneFrame'
 import { DigitalCardPreview } from '@/components/card/DigitalCardPreview'
 import { SectionManager, sectionMeta } from '@/features/builder/SectionManager'
@@ -39,29 +39,22 @@ const rid = () => Math.random().toString(36).slice(2, 9)
 
 export function CardBuilder() {
   useDocumentTitle('Customize your review card')
-  const { card, review, patchReview, suggestions, patch, patchAppearance, setSections, published, dirty, save, publish } = useCard()
+  const { card, review, patchReview, suggestions, patch, patchAppearance, setSections, published, dirty, saving, status, save, publish } = useCard()
   const toast = useToast()
   const [pane, setPane] = useState<Pane>('review')
   const [previewMode, setPreviewMode] = useState<'review' | 'card'>('review')
   const [device, setDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile')
   const [full, setFull] = useState(false)
-  const [busy, setBusy] = useState(false)
 
   const onSave = () => {
-    setBusy(true)
-    setTimeout(() => {
-      save()
-      setBusy(false)
-      toast('Changes saved')
-    }, 500)
+    save()
+      .then(() => toast('Changes saved'))
+      .catch((e: Error) => toast(e.message, 'error'))
   }
   const onPublish = () => {
-    setBusy(true)
-    setTimeout(() => {
-      publish()
-      setBusy(false)
-      toast('Your card is live')
-    }, 700)
+    publish()
+      .then(() => toast('Your review card is live'))
+      .catch((e: Error) => toast(e.message, 'error'))
   }
 
   const setService = (id: string, p: Partial<ServiceItem>) => patch({ services: card.services.map((s) => (s.id === id ? { ...s, ...p } : s)) })
@@ -69,12 +62,30 @@ export function CardBuilder() {
 
   const size = { mobile: { w: 320, h: 620 }, tablet: { w: 420, h: 660 }, desktop: { w: 520, h: 660 } }[device]
 
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-[60dvh] items-center justify-center">
+        <span className="size-7 animate-spin rounded-full border-2 border-ink-200 border-t-brand-600" role="status" aria-label="Loading your card" />
+      </div>
+    )
+  }
+  if (status === 'none') {
+    return (
+      <EmptyState
+        icon={<Palette className="size-5" />}
+        title="You have not created a review card yet"
+        description="Set up your business and we will build your review page, permanent link and QR code."
+        action={<ButtonLink to="/onboarding">Create my review card</ButtonLink>}
+      />
+    )
+  }
+
   const editor = (
     <div className="space-y-5">
       {pane === 'profile' && (
         <>
           <Input label="Business name" value={card.businessName} onChange={(e) => patch({ businessName: e.target.value })} placeholder="Royal Spice" />
-          <Input label="Card link" value={card.slug} onChange={(e) => patch({ slug: slugify(e.target.value) })} hint={cardUrl(card.slug || 'your-business')} leading={<span className="text-[13px]">tapcard.in/</span>} className="[&_input]:pl-[88px]" />
+          <Input label="Card link" value={card.slug} onChange={(e) => patch({ slug: slugify(e.target.value) })} hint={reviewUrl(card.slug || 'your-business')} leading={<span className="text-[13px]">/review/</span>} className="[&_input]:pl-[70px]" />
           <Input label="Tagline" value={card.tagline} onChange={(e) => patch({ tagline: e.target.value })} placeholder="Restaurant & Cafe" />
           <Textarea label="Description" value={card.description} onChange={(e) => patch({ description: e.target.value })} hint={`${card.description.length}/200 characters`} maxLength={200} />
           <div>
@@ -268,7 +279,7 @@ export function CardBuilder() {
     showBusinessInfo: review.showBusinessInfo,
     showBranding: card.appearance.showBranding,
     googleReviewUrl: card.reviewUrl,
-    suggestions: suggestions.map((text, i) => ({ id: `preview-${i}`, text })),
+    suggestions: suggestions.filter((s) => s.enabled !== false).map((s) => ({ id: s.id, text: s.text })),
     business: review.showBusinessInfo
       ? { phone: card.phone, whatsapp: card.whatsapp, website: card.website, address: card.address, mapsUrl: card.mapsUrl, instagram: card.instagram, facebook: card.facebook }
       : null,
@@ -289,8 +300,8 @@ export function CardBuilder() {
           <Segmented value={device} onChange={setDevice} className="w-[220px]" options={[{ value: 'mobile', label: <Smartphone className="mx-auto size-4" /> }, { value: 'tablet', label: <Tablet className="mx-auto size-4" /> }, { value: 'desktop', label: <Monitor className="mx-auto size-4" /> }]} />
         </div>
         <Button size="sm" variant="ghost" className="lg:hidden" icon={<Eye className="size-4" />} onClick={() => setFull(true)}>Preview</Button>
-        <Button size="sm" variant="secondary" icon={<Save className="size-4" />} loading={busy} onClick={onSave} disabled={!dirty}>Save</Button>
-        <Button size="sm" icon={<Check className="size-4" />} loading={busy} onClick={onPublish}>{published ? 'Update live card' : 'Publish'}</Button>
+        <Button size="sm" variant="secondary" icon={<Save className="size-4" />} loading={saving} onClick={onSave} disabled={!dirty}>Save</Button>
+        <Button size="sm" icon={<Check className="size-4" />} loading={saving} onClick={onPublish}>{published ? 'Update live card' : 'Publish'}</Button>
       </div>
 
       <div className="grid flex-1 lg:grid-cols-[248px_minmax(0,1fr)_auto]">

@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BarChart3, Boxes, ExternalLink, Eye, MessageCircle, MousePointerClick, Palette, Phone, QrCode, ScanLine, Star, UtensilsCrossed } from 'lucide-react'
 import { Button, ButtonLink } from '@/components/ui/Button'
@@ -8,12 +9,12 @@ import { ScanAreaChart, ClicksLineChart, DonutChart } from '@/components/charts/
 import { PhoneFrame } from '@/components/card/PhoneFrame'
 import { DigitalCardPreview } from '@/components/card/DigitalCardPreview'
 import { QRImage } from '@/components/card/QRImage'
-import { clicksSeries, deltas, devices, metricsFor, recentActivity, scansSeries } from '@/data/dashboard'
+import { recentActivity } from '@/data/dashboard'
+import { analyticsApi, type AnalyticsSummary } from '@/services/ownerApi'
 import { useAuth } from '@/store/auth'
 import { useCard } from '@/store/card'
-import { useMockQuery } from '@/hooks/useMockQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { cardUrl } from '@/lib/format'
+import { reviewUrl } from '@/lib/format'
 import { useToast } from '@/components/ui/Toast'
 
 const activityIcons: Record<string, typeof ScanLine> = { scan: ScanLine, whatsapp: MessageCircle, review: Star, menu: UtensilsCrossed, phone: Phone }
@@ -23,19 +24,31 @@ export function DashboardHome() {
   const { user } = useAuth()
   const { card, published } = useCard()
   const toast = useToast()
-  const m = metricsFor('30')
-  const { status, retry } = useMockQuery(m, { delay: 700 })
-  const loading = status === 'loading'
+  const [data, setData] = useState<AnalyticsSummary | null>(null)
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+
+  const load = useCallback(() => {
+    setState('loading')
+    analyticsApi
+      .summary('30')
+      .then((d) => { setData(d); setState('ready') })
+      .catch(() => setState('error'))
+  }, [])
+  useEffect(load, [load])
+
+  const loading = state === 'loading'
+  const m = data?.metrics ?? {}
+  const deltas = data?.deltas ?? {}
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   const copy = async () => {
-    await navigator.clipboard.writeText(cardUrl(card.slug))
+    await navigator.clipboard.writeText(reviewUrl(card.slug))
     toast('Card link copied')
   }
 
-  if (status === 'error') return <ErrorState onRetry={retry} />
+  if (state === 'error') return <ErrorState onRetry={load} />
 
   return (
     <div className="space-y-6">
@@ -45,7 +58,7 @@ export function DashboardHome() {
           <p className="mt-1 text-[15px] text-ink-500">Here is how {card.businessName} performed in the last 30 days.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" icon={<ExternalLink className="size-4" />} onClick={() => window.open(`/${card.slug}`, '_blank')}>View card</Button>
+          <Button variant="secondary" icon={<ExternalLink className="size-4" />} onClick={() => window.open(`/review/${card.slug}`, '_blank')}>View review page</Button>
           <ButtonLink to="/dashboard/card-builder" icon={<Palette className="size-4" />}>Customize</ButtonLink>
         </div>
       </div>
@@ -59,23 +72,23 @@ export function DashboardHome() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard loading={loading} label="QR Scans" value={m.scans} delta={deltas.scans} icon={<ScanLine className="size-4" />} />
-        <StatCard loading={loading} label="Unique Visitors" value={m.visitors} delta={deltas.visitors} icon={<Eye className="size-4" />} />
-        <StatCard loading={loading} label="WhatsApp Clicks" value={m.whatsapp} delta={deltas.whatsapp} icon={<MessageCircle className="size-4" />} />
-        <StatCard loading={loading} label="Review Clicks" value={m.reviews} delta={deltas.reviews} icon={<Star className="size-4" />} />
-        <StatCard loading={loading} label="Website Clicks" value={m.website} delta={deltas.website} icon={<MousePointerClick className="size-4" />} />
+        <StatCard loading={loading} label="Scans & Opens" value={m.scans ?? 0} delta={deltas.scans} icon={<ScanLine className="size-4" />} />
+        <StatCard loading={loading} label="Review Page Views" value={m.reviewViews ?? 0} delta={deltas.reviewViews} icon={<Eye className="size-4" />} />
+        <StatCard loading={loading} label="Reviews Submitted" value={m.reviewsSubmitted ?? 0} delta={deltas.reviewsSubmitted} icon={<Star className="size-4" />} />
+        <StatCard loading={loading} label="Google Clicks" value={m.reviews ?? 0} delta={deltas.reviews} icon={<MousePointerClick className="size-4" />} />
+        <StatCard loading={loading} label="Conversion" value={`${m.conversion ?? 0}%`} icon={<MessageCircle className="size-4" />} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
           <Card>
-            <CardHeader title="QR scans" description="Last 30 days" action={<Link to="/dashboard/analytics" className="text-[13px] font-medium text-brand-700 hover:underline">Full analytics →</Link>} />
-            <div className="px-2 pb-4 pt-5">{loading ? <Skeleton className="mx-3 h-[260px]" /> : <ScanAreaChart data={scansSeries('30')} />}</div>
+            <CardHeader title="Scans & review page views" description="Last 30 days" action={<Link to="/dashboard/analytics" className="text-[13px] font-medium text-brand-700 hover:underline">Full analytics →</Link>} />
+            <div className="px-2 pb-4 pt-5">{loading ? <Skeleton className="mx-3 h-[260px]" /> : <ScanAreaChart data={data?.series.scans ?? []} />}</div>
           </Card>
 
           <Card>
-            <CardHeader title="Click activity" description="Which buttons your customers tap" />
-            <div className="px-2 pb-4 pt-5">{loading ? <Skeleton className="mx-3 h-[260px]" /> : <ClicksLineChart data={clicksSeries('30')} />}</div>
+            <CardHeader title="Click activity" description="What customers tap after reviewing" />
+            <div className="px-2 pb-4 pt-5">{loading ? <Skeleton className="mx-3 h-[260px]" /> : <ClicksLineChart data={data?.series.clicks ?? []} />}</div>
           </Card>
 
           <Card>
@@ -109,21 +122,21 @@ export function DashboardHome() {
             <CardHeader title="Your card" description={published ? 'Live and scannable' : 'Not published yet'} />
             <div className="flex flex-col items-center px-5 pb-5 pt-4">
               <PhoneFrame height={380} width={230}><DigitalCardPreview card={card} /></PhoneFrame>
-              <button onClick={copy} className="mt-4 w-full truncate rounded-xl bg-ink-50 px-3 py-2.5 text-center font-mono text-[12px] text-ink-600 hover:bg-ink-100">{cardUrl(card.slug)}</button>
+              <button onClick={copy} className="mt-4 w-full truncate rounded-xl bg-ink-50 px-3 py-2.5 text-center font-mono text-[12px] text-ink-600 hover:bg-ink-100">{reviewUrl(card.slug)}</button>
             </div>
           </Card>
 
           <Card>
             <CardHeader title="Your QR code" />
             <div className="flex flex-col items-center gap-3 p-5 pt-4">
-              <QRImage text={cardUrl(card.slug)} size={130} />
+              <QRImage text={reviewUrl(card.slug)} size={130} />
               <ButtonLink to="/dashboard/qr" full variant="secondary" size="sm" icon={<QrCode className="size-4" />}>Customize & download</ButtonLink>
             </div>
           </Card>
 
           <Card>
             <CardHeader title="Devices" description="How customers open your card" />
-            <div className="px-3 pb-4 pt-3">{loading ? <Skeleton className="mx-3 h-[220px]" /> : <DonutChart data={devices} />}</div>
+            <div className="px-3 pb-4 pt-3">{loading ? <Skeleton className="mx-3 h-[220px]" /> : <DonutChart data={data?.devices ?? []} />}</div>
           </Card>
 
           <Card>
