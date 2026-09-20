@@ -101,8 +101,10 @@ publicRouter.get(
       include: reviewCardInclude,
     })
     if (!card) throw ApiError.notFound('No review card is published at that link.')
-    // Short cache: an owner editing a suggestion expects to see it on the next scan.
-    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120')
+    // Deliberately uncached. An owner who edits a suggestion expects the very next scan
+    // to show it, and a CDN stale window would silently serve the old copy for minutes.
+    // This is one indexed query against a database in the same region as the function.
+    res.set('Cache-Control', 'no-store')
     res.json({ card: serialiseReviewCard(card) })
   }),
 )
