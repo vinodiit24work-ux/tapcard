@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { prisma } from '../lib/prisma'
-import { env } from '../lib/env'
-import type { DeviceKind, EventType } from '../generated/prisma/enums'
+import { prisma } from '../lib/prisma.js'
+import { env } from '../lib/env.js'
+import type { DeviceKind, EventType } from '../generated/prisma/enums.js'
 
 /**
  * A coarse, rotating identifier used only to approximate unique visitors.

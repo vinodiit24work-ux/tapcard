@@ -1,8 +1,8 @@
 import { Router } from 'express'
-import { handler } from '../utils/http'
-import { requireAuth } from '../middleware/auth'
-import { ownedCard } from '../services/card.service'
-import { summarise } from '../services/analytics.service'
+import { handler } from '../utils/http.js'
+import { requireAuth } from '../middleware/auth.js'
+import { ownedCard } from '../services/card.service.js'
+import { summarise } from '../services/analytics.service.js'
 
 export const analyticsRouter = Router()
 analyticsRouter.use(requireAuth)

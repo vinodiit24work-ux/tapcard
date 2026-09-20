@@ -1,16 +1,16 @@
 import { Router } from 'express'
-import { prisma } from '../lib/prisma'
-import { ApiError, handler } from '../utils/http'
-import { validate } from '../middleware/validate'
-import { requireAuth } from '../middleware/auth'
-import { assertSlugAvailable, cardInclude, defaultSections, ownedCard, serialiseCard } from '../services/card.service'
+import { prisma } from '../lib/prisma.js'
+import { ApiError, handler } from '../utils/http.js'
+import { validate } from '../middleware/validate.js'
+import { requireAuth } from '../middleware/auth.js'
+import { assertSlugAvailable, cardInclude, defaultSections, ownedCard, serialiseCard } from '../services/card.service.js'
 import {
   createBusinessSchema, customLinksSchema, hoursSchema, menuSchema, sectionsSchema, servicesSchema,
   slugSchema, socialSchema, updateBusinessSchema, updateCardSchema,
-} from '../validators/card.validators'
-import { isValidSlug, slugify } from '../utils/slug'
-import type { SectionKind } from '../generated/prisma/enums'
-import type { Prisma } from '../generated/prisma/client'
+} from '../validators/card.validators.js'
+import { isValidSlug, slugify } from '../utils/slug.js'
+import type { SectionKind } from '../generated/prisma/enums.js'
+import type { Prisma } from '../generated/prisma/client.js'
 
 export const cardRouter = Router()
 cardRouter.use(requireAuth)

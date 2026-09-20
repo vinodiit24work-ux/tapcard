@@ -1,6 +1,6 @@
-import { env } from './lib/env'
-import { assertDatabase, prisma } from './lib/prisma'
-import { app } from './app'
+import { env } from './lib/env.js'
+import { assertDatabase, prisma } from './lib/prisma.js'
+import { app } from './app.js'
 
 /** Local development and traditional hosts. Serverless entry points import `app` directly. */
 assertDatabase()

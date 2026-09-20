@@ -1,17 +1,17 @@
 import { Router } from 'express'
-import { prisma } from '../lib/prisma'
-import { env } from '../lib/env'
-import { ApiError, handler } from '../utils/http'
-import { validate } from '../middleware/validate'
-import { authLimiter } from '../middleware/rateLimit'
-import { requireAuth } from '../middleware/auth'
+import { prisma } from '../lib/prisma.js'
+import { env } from '../lib/env.js'
+import { ApiError, handler } from '../utils/http.js'
+import { validate } from '../middleware/validate.js'
+import { authLimiter } from '../middleware/rateLimit.js'
+import { requireAuth } from '../middleware/auth.js'
 import {
   changePasswordSchema, forgotSchema, loginSchema, registerSchema, resetSchema, updateAccountSchema, verifySchema,
-} from '../validators/auth.validators'
+} from '../validators/auth.validators.js'
 import {
   clearAuthCookies, cookieNames, createSession, hashPassword, hashToken, oneTimeToken, revokeAllSessions,
   revokeSession, rotateSession, setAuthCookies, signAccessToken, verifyPassword,
-} from '../services/auth.service'
+} from '../services/auth.service.js'
 
 export const authRouter = Router()
 

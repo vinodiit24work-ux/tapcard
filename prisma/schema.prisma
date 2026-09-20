@@ -1,6 +1,10 @@
 generator client {
   provider = "prisma-client"
   output   = "../server/generated/prisma"
+  // The API runs as an ESM serverless function, where Node requires explicit
+  // extensions on relative imports — including inside the generated client.
+  moduleFormat        = "esm"
+  importFileExtension = "js"
 }
 
 datasource db {

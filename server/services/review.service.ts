@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma'
+import { prisma } from '../lib/prisma.js'
 
 /**
  * The review experience a customer sees. Deliberately small: a customer arriving from a

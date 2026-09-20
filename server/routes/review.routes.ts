@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { prisma } from '../lib/prisma'
-import { ApiError, handler } from '../utils/http'
-import { validate } from '../middleware/validate'
-import { requireAuth } from '../middleware/auth'
-import { ownedCard } from '../services/card.service'
-import { reviewStats } from '../services/review.service'
-import { reorderSuggestionsSchema, reviewCopySchema, reviewListSchema, suggestionSchema } from '../validators/review.validators'
+import { prisma } from '../lib/prisma.js'
+import { ApiError, handler } from '../utils/http.js'
+import { validate } from '../middleware/validate.js'
+import { requireAuth } from '../middleware/auth.js'
+import { ownedCard } from '../services/card.service.js'
+import { reviewStats } from '../services/review.service.js'
+import { reorderSuggestionsSchema, reviewCopySchema, reviewListSchema, suggestionSchema } from '../validators/review.validators.js'
 
 export const reviewRouter = Router()
 reviewRouter.use(requireAuth)

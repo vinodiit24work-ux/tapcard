@@ -1,7 +1,7 @@
-import { prisma } from '../lib/prisma'
-import { ApiError } from '../utils/http'
-import { isValidSlug } from '../utils/slug'
-import type { SectionKind } from '../generated/prisma/enums'
+import { prisma } from '../lib/prisma.js'
+import { ApiError } from '../utils/http.js'
+import { isValidSlug } from '../utils/slug.js'
+import type { SectionKind } from '../generated/prisma/enums.js'
 
 export const SECTION_ORDER: SectionKind[] = ['PROFILE', 'CONTACT', 'SOCIAL', 'MENU', 'SERVICES', 'BOOKING', 'REVIEWS', 'GALLERY', 'LINKS']
 

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
-import { cookieNames, verifyAccessToken, type AccessClaims } from '../services/auth.service'
-import { ApiError } from '../utils/http'
+import { cookieNames, verifyAccessToken, type AccessClaims } from '../services/auth.service.js'
+import { ApiError } from '../utils/http.js'
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace

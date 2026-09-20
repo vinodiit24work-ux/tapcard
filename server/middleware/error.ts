@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { ZodError } from 'zod'
-import { ApiError } from '../utils/http'
-import { isProd } from '../lib/env'
+import { ApiError } from '../utils/http.js'
+import { isProd } from '../lib/env.js'
 
 export function notFound(_req: Request, _res: Response, next: NextFunction) {
   next(ApiError.notFound('That endpoint does not exist.'))

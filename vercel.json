@@ -2,19 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
+      "source": "/api/:path*",
+      "destination": "/api/[...path]"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "tapcard-api"
-      }
     }
   ],
   "headers": [
@@ -44,12 +37,5 @@
         }
       ]
     }
-  ],
-  "services": {
-    "tapcard-api": {
-      "root": ".",
-      "framework": "vite",
-      "buildCommand": "npm ci && npm run db:generate"
-    }
-  }
+  ]
 }

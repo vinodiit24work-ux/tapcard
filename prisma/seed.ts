@@ -4,9 +4,10 @@
  */
 import 'dotenv/config'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { Algorithm, hash as argonHash } from '@node-rs/argon2'
-import { PrismaClient } from '../server/generated/prisma/client'
-import type { SectionKind } from '../server/generated/prisma/enums'
+import { randomBytes } from 'node:crypto'
+import { argon2id } from 'hash-wasm'
+import { PrismaClient } from '../server/generated/prisma/client.js'
+import type { SectionKind } from '../server/generated/prisma/enums.js'
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) })
 
@@ -79,7 +80,7 @@ async function main() {
   }
 
   // --- Demo accounts -------------------------------------------------------
-  const password = await argonHash('TapCard@2026', { algorithm: Algorithm.Argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
+  const password = await argon2id({ password: 'TapCard@2026', salt: randomBytes(16), memorySize: 19456, iterations: 2, parallelism: 1, hashLength: 32, outputType: 'encoded' })
 
   await prisma.user.upsert({
     where: { email: 'admin@tapcard.in' },

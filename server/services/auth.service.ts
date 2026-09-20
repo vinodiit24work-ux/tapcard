@@ -1,11 +1,11 @@
-import { Algorithm, hash as argonHash, verify as argonVerify } from '@node-rs/argon2'
+import { argon2id, argon2Verify } from 'hash-wasm'
 import jwt from 'jsonwebtoken'
 import { createHash, randomBytes } from 'node:crypto'
 import type { Response } from 'express'
-import { prisma } from '../lib/prisma'
-import { env, isProd } from '../lib/env'
-import { ApiError } from '../utils/http'
-import type { Role } from '../generated/prisma/enums'
+import { prisma } from '../lib/prisma.js'
+import { env, isProd } from '../lib/env.js'
+import { ApiError } from '../utils/http.js'
+import type { Role } from '../generated/prisma/enums.js'
 
 const ACCESS_TTL = '15m'
 const REFRESH_DAYS = 30
@@ -18,13 +18,28 @@ export interface AccessClaims {
   email: string
 }
 
-/** Argon2id with sensible cost. Hashing is deliberately slow. */
+/**
+ * Argon2id with sensible cost. Hashing is deliberately slow.
+ *
+ * This is the WASM implementation rather than a native binding: serverless bundlers
+ * routinely miss platform-specific optional dependencies, and a login endpoint that
+ * crashes in production is a worse trade than a few milliseconds of hashing time.
+ * The output is standard PHC format, so hashes are portable either way.
+ */
 export const hashPassword = (plain: string) =>
-  argonHash(plain, { algorithm: Algorithm.Argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
+  argon2id({
+    password: plain,
+    salt: randomBytes(16),
+    memorySize: 19456,
+    iterations: 2,
+    parallelism: 1,
+    hashLength: 32,
+    outputType: 'encoded',
+  })
 
 export const verifyPassword = async (hash: string, plain: string) => {
   try {
-    return await argonVerify(hash, plain)
+    return await argon2Verify({ password: plain, hash })
   } catch {
     return false
   }
