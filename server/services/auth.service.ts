@@ -1,4 +1,4 @@
-import argon2 from 'argon2'
+import { Algorithm, hash as argonHash, verify as argonVerify } from '@node-rs/argon2'
 import jwt from 'jsonwebtoken'
 import { createHash, randomBytes } from 'node:crypto'
 import type { Response } from 'express'
@@ -20,11 +20,11 @@ export interface AccessClaims {
 
 /** Argon2id with sensible cost. Hashing is deliberately slow. */
 export const hashPassword = (plain: string) =>
-  argon2.hash(plain, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
+  argonHash(plain, { algorithm: Algorithm.Argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
 
 export const verifyPassword = async (hash: string, plain: string) => {
   try {
-    return await argon2.verify(hash, plain)
+    return await argonVerify(hash, plain)
   } catch {
     return false
   }

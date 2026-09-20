@@ -4,7 +4,7 @@
  */
 import 'dotenv/config'
 import { PrismaPg } from '@prisma/adapter-pg'
-import argon2 from 'argon2'
+import { Algorithm, hash as argonHash } from '@node-rs/argon2'
 import { PrismaClient } from '../server/generated/prisma/client'
 import type { SectionKind } from '../server/generated/prisma/enums'
 
@@ -79,7 +79,7 @@ async function main() {
   }
 
   // --- Demo accounts -------------------------------------------------------
-  const password = await argon2.hash('TapCard@2026', { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
+  const password = await argonHash('TapCard@2026', { algorithm: Algorithm.Argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
 
   await prisma.user.upsert({
     where: { email: 'admin@tapcard.in' },
