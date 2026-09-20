@@ -8,7 +8,7 @@ import { ReviewDemo } from '@/features/marketing/ReviewDemo'
 import { QRImage } from '@/components/card/QRImage'
 import { Accordion, Eyebrow, Section, SectionHead, faqs } from '@/features/marketing/Bits'
 import { royalSpice, templates } from '@/data/templates'
-import { plans } from '@/data/commerce'
+import { useCatalogue } from '@/hooks/useCatalogue'
 import { inr, num, reviewUrl } from '@/lib/format'
 import { covers } from '@/lib/theme'
 import { cn } from '@/lib/cn'
@@ -58,6 +58,8 @@ const metrics = [
 
 export function Home() {
   useDocumentTitle('TapCard — One Tap. One Scan. One Easy Review.')
+  const { plans: apiPlans } = useCatalogue()
+  const plans = (apiPlans ?? []).map((p) => ({ id: p.tier, name: p.name, price: p.monthlyPaise / 100, tagline: p.tagline, popular: p.popular, features: p.features, cta: p.tier === 'FREE' ? 'Start free' : p.tier === 'PRO' ? 'Go Pro' : 'Choose Business' }))
   return (
     <>
       {/* Hero */}
@@ -75,7 +77,7 @@ export function Home() {
               share their experience.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <ButtonLink to="/register" size="lg" iconRight={<ArrowRight className="size-4" />}>Create Your Review Card</ButtonLink>
+              <ButtonLink to="/get-card" size="lg" iconRight={<ArrowRight className="size-4" />}>Get My Review Card</ButtonLink>
               <ButtonLink to="/demo" size="lg" variant="secondary" icon={<MousePointerClick className="size-4" />}>See Demo</ButtonLink>
             </div>
             <ul className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-600">
@@ -268,7 +270,7 @@ export function Home() {
                   <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-emerald-600" /> {f}</li>
                 ))}
               </ul>
-              <ButtonLink to="/register" className="mt-7" full variant={p.popular ? 'primary' : 'secondary'}>{p.cta}</ButtonLink>
+              <ButtonLink to="/get-card" className="mt-7" full variant={p.popular ? 'primary' : 'secondary'}>{p.cta}</ButtonLink>
             </div>
           ))}
         </div>
@@ -289,7 +291,7 @@ export function Home() {
               <h2 className="text-balance font-display text-3xl font-extrabold text-white sm:text-4xl">Your happiest customers just need somewhere to say so.</h2>
               <p className="mt-4 text-pretty text-lg text-white/85">Give them one thing to tap. Set up your review card free — it takes about five minutes.</p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                <ButtonLink to="/register" size="lg" className="bg-white !text-ink-900 hover:bg-ink-100" iconRight={<ArrowRight className="size-4" />}>Create Your Review Card</ButtonLink>
+                <ButtonLink to="/get-card" size="lg" className="bg-white !text-ink-900 hover:bg-ink-100" iconRight={<ArrowRight className="size-4" />}>Get My Review Card</ButtonLink>
                 <ButtonLink to="/demo" size="lg" className="border border-white/40 bg-white/10 !text-white backdrop-blur hover:bg-white/20">See Demo</ButtonLink>
               </div>
             </div>

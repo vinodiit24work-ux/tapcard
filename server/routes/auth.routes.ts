@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/auth.js'
 import {
   changePasswordSchema, forgotSchema, loginSchema, registerSchema, resetSchema, updateAccountSchema, verifySchema,
 } from '../validators/auth.validators.js'
+import { emails } from '../services/email.service.js'
 import {
   clearAuthCookies, cookieNames, createSession, hashPassword, hashToken, oneTimeToken, revokeAllSessions,
   revokeSession, rotateSession, setAuthCookies, signAccessToken, verifyPassword,
@@ -22,10 +23,6 @@ const publicUser = (u: { id: string; name: string; email: string; role: string; 
   verified: u.emailVerified,
 })
 
-/** Emails are queued in Phase 8; until then the link is logged for local testing. */
-const deliver = (kind: string, to: string, link: string) => {
-  if (env.NODE_ENV !== 'production') console.info(`[email:${kind}] ${to} → ${link}`)
-}
 
 authRouter.post(
   '/register',
@@ -48,7 +45,7 @@ authRouter.post(
       },
     })
 
-    deliver('verify', email, `${env.APP_URL}/verify-email?token=${verify.token}`)
+    void emails.verify(email, name, `${env.APP_URL}/verify-email?token=${verify.token}`)
 
     const session = await createSession(user.id, req.headers['user-agent'], req.ip)
     setAuthCookies(res, signAccessToken({ sub: user.id, role: user.role, email: user.email }), session.token, session.expiresAt)
@@ -141,7 +138,7 @@ authRouter.post(
     if (user.emailVerified) return res.json({ ok: true })
     const verify = oneTimeToken(24)
     await prisma.user.update({ where: { id: user.id }, data: { verifyToken: verify.hash, verifyTokenExpiry: verify.expires } })
-    deliver('verify', user.email, `${env.APP_URL}/verify-email?token=${verify.token}`)
+    void emails.verify(user.email, user.name, `${env.APP_URL}/verify-email?token=${verify.token}`)
     res.json({ ok: true, ...(env.NODE_ENV === 'production' ? {} : { verifyToken: verify.token }) })
   }),
 )
@@ -156,7 +153,7 @@ authRouter.post(
     if (user && !user.deletedAt) {
       const reset = oneTimeToken(0.5)
       await prisma.user.update({ where: { id: user.id }, data: { resetToken: reset.hash, resetTokenExpiry: reset.expires } })
-      deliver('reset', email, `${env.APP_URL}/reset-password?token=${reset.token}`)
+      void emails.reset(email, `${env.APP_URL}/reset-password?token=${reset.token}`)
     }
     // Always the same answer, so this cannot be used to discover accounts.
     res.json({ ok: true })

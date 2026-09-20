@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Check, Minus } from 'lucide-react'
 import { ButtonLink } from '@/components/ui/Button'
 import { Accordion, Section, SectionHead } from '@/features/marketing/Bits'
+import { Skeleton } from '@/components/ui/Feedback'
 import { Segmented } from '@/components/ui/Form'
-import { plans, products } from '@/data/commerce'
+import { useCatalogue } from '@/hooks/useCatalogue'
 import { inr } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -41,7 +42,17 @@ const faqs = [
 export function Pricing() {
   useDocumentTitle('Pricing')
   const [cycle, setCycle] = useState<'monthly' | 'yearly'>('monthly')
-  const mult = cycle === 'yearly' ? 10 : 1
+  const { products, plans: apiPlans, state } = useCatalogue()
+  const plans = (apiPlans ?? []).map((p) => ({
+    id: p.tier,
+    name: p.name,
+    price: p.monthlyPaise / 100,
+    yearly: p.yearlyPaise / 100,
+    tagline: p.tagline,
+    popular: p.popular,
+    features: p.features,
+    cta: p.tier === 'FREE' ? 'Start free' : p.tier === 'PRO' ? 'Go Pro' : 'Choose Business',
+  }))
 
   return (
     <>
@@ -52,22 +63,23 @@ export function Pricing() {
         </div>
 
         <div className="mt-12 grid gap-5 lg:grid-cols-3">
+          {state === 'loading' && [0, 1, 2].map((i) => <Skeleton key={i} className="h-96 rounded-2xl" />)}
           {plans.map((p) => (
             <div key={p.id} className={cn('relative flex flex-col rounded-2xl border bg-white p-7', p.popular ? 'border-brand-500 shadow-card ring-1 ring-brand-500' : 'border-ink-200')}>
               {p.popular && <span className="absolute -top-3 left-7 rounded-full bg-brand-600 px-3 py-1 text-[11px] font-bold text-white">Most popular</span>}
               <h3 className="font-display text-lg font-bold text-ink-900">{p.name}</h3>
               <p className="mt-1 text-[13px] text-ink-500">{p.tagline}</p>
               <p className="mt-5 font-display text-4xl font-extrabold text-ink-900">
-                {p.price === 0 ? '₹0' : inr(p.price * mult)}
+                {p.price === 0 ? '₹0' : inr(cycle === 'yearly' ? p.yearly : p.price)}
                 <span className="text-sm font-medium text-ink-500">{p.price === 0 ? '' : cycle === 'yearly' ? '/year' : '/month'}</span>
               </p>
-              {p.price > 0 && cycle === 'yearly' && <p className="mt-1 text-xs font-semibold text-emerald-600">You save {inr(p.price * 2)} a year</p>}
+              {p.price > 0 && cycle === 'yearly' && <p className="mt-1 text-xs font-semibold text-emerald-600">You save {inr(p.price * 12 - p.yearly)} a year</p>}
               <ul className="mt-6 flex-1 space-y-2.5 text-[14px] text-ink-600">
                 {p.features.map((f) => (
                   <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-emerald-600" /> {f}</li>
                 ))}
               </ul>
-              <ButtonLink to="/register" className="mt-7" full variant={p.popular ? 'primary' : 'secondary'}>{p.cta}</ButtonLink>
+              <ButtonLink to="/get-card" className="mt-7" full variant={p.popular ? 'primary' : 'secondary'}>{p.cta}</ButtonLink>
             </div>
           ))}
         </div>
@@ -101,11 +113,11 @@ export function Pricing() {
       <Section>
         <SectionHead title="Physical cards & stands" description="One-time purchases, shipped across India. No subscription needed." />
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {products.slice(0, 4).map((p) => (
+          {(products ?? []).slice(0, 4).map((p) => (
             <div key={p.id} className="rounded-2xl border border-ink-200 bg-white p-5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-brand-600">{p.tech}</p>
               <h3 className="mt-1.5 font-display text-[15px] font-bold text-ink-900">{p.name}</h3>
-              <p className="mt-2 font-display text-2xl font-extrabold text-ink-900">{inr(p.price)}</p>
+              <p className="mt-2 font-display text-2xl font-extrabold text-ink-900">{inr(p.pricePaise / 100)}</p>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-500">{p.description}</p>
             </div>
           ))}

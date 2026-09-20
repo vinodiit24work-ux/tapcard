@@ -74,3 +74,8 @@ export const adminSuggestionsSchema = z.object({
     .array(z.object({ text: z.string().trim().min(4, 'Write at least a few words.').max(300), enabled: z.boolean().default(true) }))
     .max(12),
 })
+
+export const validateCouponSchema = z.object({
+  code: z.string().trim().min(2).max(40),
+  subtotalPaise: z.number().int().min(0).max(100_000_000),
+})

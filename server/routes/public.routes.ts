@@ -10,8 +10,9 @@ import { reviewCardInclude, serialiseReviewCard } from '../services/review.servi
 import { deviceFrom, visitorKey } from '../services/analytics.service.js'
 import { eventSchema } from '../validators/analytics.validators.js'
 import { submitReviewSchema } from '../validators/review.validators.js'
-import { createRequestSchema, customerApprovalSchema } from '../validators/request.validators.js'
+import { createRequestSchema, customerApprovalSchema, validateCouponSchema } from '../validators/request.validators.js'
 import { cardLink, moveStatus, requestReference, reviewLink } from '../services/request.service.js'
+import { emails } from '../services/email.service.js'
 
 export const publicRouter = Router()
 
@@ -223,6 +224,7 @@ publicRouter.post(
     await prisma.cardRequestEvent.create({
       data: { requestId: request.id, status: 'NEW_REQUEST', note: 'Submitted from the website' },
     })
+    if (body.email) void emails.requestReceived(body.email, body.businessName, request.reference)
     res.status(201).json({ request: { reference: request.reference, businessName: request.businessName } })
   }),
 )
@@ -278,6 +280,39 @@ publicRouter.post(
     }
 
     res.json({ ok: true, status: approved ? 'APPROVED' : 'CHANGES_REQUESTED' })
+  }),
+)
+
+/**
+ * Validates a coupon against the live subtotal and returns the discount in paise.
+ * Every rule — activity, window, minimum, usage cap — is enforced here, because a
+ * discount decided in the browser is a discount anyone can grant themselves.
+ */
+publicRouter.post(
+  '/coupons/validate',
+  eventLimiter,
+  validate(validateCouponSchema),
+  handler(async (req, res) => {
+    const { code, subtotalPaise } = req.body as { code: string; subtotalPaise: number }
+    const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } })
+
+    const invalid = () => ApiError.badRequest('That code is not valid.')
+    if (!coupon || !coupon.active) throw invalid()
+
+    const now = new Date()
+    if (coupon.startsAt && coupon.startsAt > now) throw invalid()
+    if (coupon.endsAt && coupon.endsAt < now) throw ApiError.badRequest('That code has expired.')
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) throw ApiError.badRequest('That code has been fully used.')
+    if (subtotalPaise < coupon.minOrderPaise) {
+      throw ApiError.badRequest(`Add items worth ₹${Math.ceil((coupon.minOrderPaise - subtotalPaise) / 100)} more to use this code.`)
+    }
+
+    const discountPaise =
+      coupon.kind === 'PERCENT'
+        ? Math.round((subtotalPaise * coupon.value) / 100)
+        : Math.min(coupon.value, subtotalPaise)
+
+    res.json({ code: coupon.code, kind: coupon.kind, value: coupon.value, discountPaise })
   }),
 )
 

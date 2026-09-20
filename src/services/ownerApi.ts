@@ -248,3 +248,45 @@ export const publicApi = {
   decide: (token: string, decision: 'approve' | 'changes', note?: string) =>
     api<{ ok: boolean; status: string }>('/public/approve', { method: 'POST', body: JSON.stringify({ token, decision, note }) }),
 }
+
+/* ------------------------------------------------------- catalogue (public) -- */
+
+export interface ApiProduct {
+  id: string
+  sku: string
+  name: string
+  description: string
+  pricePaise: number
+  compareAtPaise: number | null
+  kind: 'CARD' | 'STAND' | 'PACK'
+  tech: 'QR' | 'NFC'
+  material: string
+  badge: string | null
+  packSize: number
+  features: string[]
+}
+
+export interface ApiPlan {
+  id: string
+  tier: 'FREE' | 'PRO' | 'BUSINESS'
+  name: string
+  tagline: string
+  monthlyPaise: number
+  yearlyPaise: number
+  cardLimit: number
+  features: string[]
+  popular: boolean
+}
+
+export interface CommerceSettings {
+  gstRatePercent: number
+  shippingFlatPaise: number
+  freeShippingOverPaise: number
+  productionSlaDays: number
+}
+
+export const catalogueApi = {
+  products: () => api<{ products: ApiProduct[] }>('/public/products').then((r) => r.products),
+  plans: () => api<{ plans: ApiPlan[] }>('/public/plans').then((r) => r.plans),
+  settings: () => api<{ settings: { commerce?: CommerceSettings } }>('/public/settings').then((r) => r.settings.commerce ?? null),
+}

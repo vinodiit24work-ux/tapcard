@@ -4,29 +4,29 @@ import { Check, Minus, Nfc, Plus, QrCode, ShoppingCart, Truck } from 'lucide-rea
 import { Button, ButtonLink } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Card'
-import { Modal } from '@/components/ui/Feedback'
+import { Modal, Skeleton } from '@/components/ui/Feedback'
 import { PageHeader } from '@/components/ui/Table'
 import { Input, Segmented, Textarea } from '@/components/ui/Form'
 import { QRImage } from '@/components/card/QRImage'
-import { products } from '@/data/commerce'
 import { useCart } from '@/store/cart'
 import { useCard } from '@/store/card'
 import { useToast } from '@/components/ui/Toast'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { cardUrl, inr } from '@/lib/format'
+import { inr, reviewUrl } from '@/lib/format'
 import { cn } from '@/lib/cn'
-import type { CartLine, Product } from '@/types'
+import type { CartLine } from '@/types'
+import type { ApiProduct } from '@/services/ownerApi'
 
 const filters = ['All', 'QR', 'NFC', 'Stands', 'Packs'] as const
 
-function ProductArt({ p, className }: { p: Product; className?: string }) {
+function ProductArt({ p, className }: { p: ApiProduct; className?: string }) {
   const nfc = p.tech === 'NFC'
   return (
     <div className={cn('relative flex items-center justify-center overflow-hidden', className)} style={{ background: nfc ? 'linear-gradient(135deg,#1e1b4b,#3b2fd6)' : 'linear-gradient(135deg,#eef1f6,#dfe4ec)' }}>
-      {p.kind === 'stand' ? (
+      {p.kind === 'STAND' ? (
         <div className="flex flex-col items-center">
           <div className={cn('flex size-24 items-center justify-center rounded-xl shadow-float', nfc ? 'bg-white/95' : 'bg-white')}>
-            {nfc ? <Nfc className="size-10 text-brand-700" /> : <QRImage text={cardUrl('royal-spice')} size={72} />}
+            {nfc ? <Nfc className="size-10 text-brand-700" /> : <QRImage text={reviewUrl('royal-spice')} size={72} />}
           </div>
           <div className={cn('mt-1 h-3 w-16 rounded-b-lg', nfc ? 'bg-white/40' : 'bg-white/80')} />
         </div>
@@ -47,7 +47,7 @@ function ProductArt({ p, className }: { p: Product; className?: string }) {
               </div>
             </div>
             <div className={cn('rounded-md p-1', nfc ? 'bg-white' : 'bg-white ring-1 ring-ink-200')}>
-              <QRImage text={cardUrl('royal-spice')} size={38} options={{ margin: 0 }} />
+              <QRImage text={reviewUrl('royal-spice')} size={38} options={{ margin: 0 }} />
             </div>
           </div>
           {p.packSize > 1 && <span className="absolute -bottom-2 -right-2 rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-bold text-white">×{p.packSize}</span>}
@@ -60,13 +60,13 @@ function ProductArt({ p, className }: { p: Product; className?: string }) {
 export function Store() {
   useDocumentTitle('Physical cards')
   const [filter, setFilter] = useState<(typeof filters)[number]>('All')
-  const [open, setOpen] = useState<Product | null>(null)
-  const { add, totals } = useCart()
+  const [open, setOpen] = useState<ApiProduct | null>(null)
+  const { add, totals, products, ready } = useCart()
   const { card } = useCard()
   const toast = useToast()
 
   const shown = products.filter((p) =>
-    filter === 'All' ? true : filter === 'Stands' ? p.kind === 'stand' : filter === 'Packs' ? p.kind === 'pack' : p.tech === filter && p.kind !== 'stand',
+    filter === 'All' ? true : filter === 'Stands' ? p.kind === 'STAND' : filter === 'Packs' ? p.kind === 'PACK' : p.tech === filter && p.kind !== 'STAND',
   )
 
   return (
@@ -90,6 +90,9 @@ export function Store() {
         <div className="ml-auto flex items-center gap-1.5 text-[13px] text-ink-500"><Truck className="size-4" /> Free shipping over ₹999</div>
       </div>
 
+      {!ready ? (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-80" />)}</div>
+      ) : (
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((p) => (
           <Card key={p.id} className="flex flex-col overflow-hidden transition-shadow hover:shadow-card">
@@ -103,15 +106,15 @@ export function Store() {
               </div>
               <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-ink-500">{p.description}</p>
               <ul className="mt-3 space-y-1">
-                {p.features.map((f) => <li key={f} className="flex items-start gap-1.5 text-[12px] text-ink-600"><Check className="mt-0.5 size-3 shrink-0 text-emerald-600" />{f}</li>)}
+                {(p.features as string[]).map((f) => <li key={f} className="flex items-start gap-1.5 text-[12px] text-ink-600"><Check className="mt-0.5 size-3 shrink-0 text-emerald-600" />{f}</li>)}
               </ul>
               <div className="mt-4 flex items-end justify-between">
                 <div>
-                  <p className="font-display text-xl font-extrabold text-ink-900">{inr(p.price)}</p>
-                  {p.compareAt && <p className="text-[12px] text-ink-400 line-through">{inr(p.compareAt)}</p>}
+                  <p className="font-display text-xl font-extrabold text-ink-900">{inr(p.pricePaise / 100)}</p>
+                  {p.compareAtPaise && <p className="text-[12px] text-ink-400 line-through">{inr(p.compareAtPaise / 100)}</p>}
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => { add({ productId: p.id, qty: 1, businessName: card.businessName, finish: 'matte', color: 'white', notes: '' }); toast(`${p.name} added to cart`) }}>Add</Button>
+                  <Button size="sm" variant="secondary" onClick={() => { add({ productId: p.sku, qty: 1, businessName: card.businessName, finish: 'matte', color: 'white', notes: '' }); toast(`${p.name} added to cart`) }}>Add</Button>
                   <Button size="sm" onClick={() => setOpen(p)}>Customize</Button>
                 </div>
               </div>
@@ -119,12 +122,13 @@ export function Store() {
           </Card>
         ))}
       </div>
+      )}
 
       <Card className="flex flex-wrap items-center gap-5 p-6">
-        <QRImage text={cardUrl(card.slug)} size={84} />
+        <QRImage text={reviewUrl(card.slug)} size={84} />
         <div className="min-w-[220px] flex-1">
           <h3 className="font-display text-[15px] font-bold text-ink-900">Every product carries this QR</h3>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-500">Your printed cards point to <span className="font-mono text-ink-700">{cardUrl(card.slug)}</span>. Change your details anytime — the cards never go out of date.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-500">Your printed cards point to <span className="font-mono text-ink-700">{reviewUrl(card.slug)}</span>. Change your details anytime — the cards never go out of date.</p>
         </div>
         <ButtonLink to="/dashboard/card-builder" variant="secondary" size="sm">Check my card first</ButtonLink>
       </Card>
@@ -134,7 +138,7 @@ export function Store() {
   )
 }
 
-function CustomizeModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
+function CustomizeModal({ product, onClose }: { product: ApiProduct | null; onClose: () => void }) {
   const { add } = useCart()
   const { card } = useCard()
   const toast = useToast()
@@ -146,7 +150,7 @@ function CustomizeModal({ product, onClose }: { product: Product | null; onClose
 
   if (!product) return null
   const addToCart = (buyNow: boolean) => {
-    add({ productId: product.id, qty, businessName, finish, color, notes })
+    add({ productId: product.sku, qty, businessName, finish, color, notes })
     toast(`${product.name} × ${qty} added`)
     onClose()
     setQty(1)
@@ -163,7 +167,7 @@ function CustomizeModal({ product, onClose }: { product: Product | null; onClose
       footer={
         <>
           <Button variant="secondary" onClick={() => addToCart(false)} icon={<ShoppingCart className="size-4" />}>Add to cart</Button>
-          <Button onClick={() => addToCart(true)}>Buy now · {inr(product.price * qty)}</Button>
+          <Button onClick={() => addToCart(true)}>Buy now · {inr((product.pricePaise / 100) * qty)}</Button>
         </>
       }
     >
@@ -191,8 +195,8 @@ function CustomizeModal({ product, onClose }: { product: Product | null; onClose
         </div>
       </div>
       <div className="mt-6 flex items-center justify-between rounded-xl bg-ink-50 p-4">
-        <span className="text-[14px] text-ink-600">{qty} × {inr(product.price)}</span>
-        <span className="font-display text-xl font-extrabold text-ink-900">{inr(product.price * qty)}</span>
+        <span className="text-[14px] text-ink-600">{qty} × {inr(product.pricePaise / 100)}</span>
+        <span className="font-display text-xl font-extrabold text-ink-900">{inr((product.pricePaise / 100) * qty)}</span>
       </div>
       <p className="mt-3 text-center text-[12px] text-ink-500">Prices exclude 18% GST · <Link to="/refund-policy" className="underline">Refund policy</Link></p>
     </Modal>

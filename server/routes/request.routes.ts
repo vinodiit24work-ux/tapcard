@@ -15,6 +15,7 @@ import {
 } from '../validators/request.validators.js'
 import { updateBusinessSchema, updateCardSchema } from '../validators/card.validators.js'
 import type { Prisma } from '../generated/prisma/client.js'
+import { emails, emailConfigured } from '../services/email.service.js'
 import type { SectionKind } from '../generated/prisma/enums.js'
 
 export const requestRouter = Router()
@@ -308,7 +309,14 @@ requestRouter.post(
     const message = handoverMessage(r.businessName, link)
     const digits = (r.whatsapp || r.phone).replace(/\D/g, '')
 
+    // Send it for real when we can; otherwise the admin still gets everything they
+    // need to send it themselves, and the response says which happened.
+    const delivery = channel === 'email' && r.email
+      ? await emails.approval(r.email, r.businessName, link)
+      : { sent: false, reason: channel === 'email' ? 'no_email_on_record' : 'not_requested' }
+
     res.json({
+      delivery,
       link,
       message,
       // Prepared destinations the admin opens; nothing is sent on the customer's behalf.
@@ -316,6 +324,7 @@ requestRouter.post(
       mailto: r.email ? `mailto:${r.email}?subject=${encodeURIComponent(`Your TapCard for ${r.businessName}`)}&body=${encodeURIComponent(message)}` : null,
       reviewLink: reviewLink(card.slug),
       cardLink: cardLink(card.slug),
+      emailConfigured,
     })
   }),
 )

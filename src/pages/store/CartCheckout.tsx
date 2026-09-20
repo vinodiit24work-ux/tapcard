@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/Feedback'
 import { Input, Segmented, Select, Textarea } from '@/components/ui/Form'
 import { Logo } from '@/components/ui/Logo'
-import { commerceConfig, productById } from '@/data/commerce'
+
 import { useCart } from '@/store/cart'
 import { useCard } from '@/store/card'
 import { useToast } from '@/components/ui/Toast'
@@ -15,7 +15,7 @@ import { inr } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
 function Summary({ children }: { children?: React.ReactNode }) {
-  const { totals, coupon, couponError, applyCoupon, removeCoupon } = useCart()
+  const { totals, coupon, couponError, applyCoupon, removeCoupon, commerce } = useCart()
   const [code, setCode] = useState('')
   return (
     <Card className="p-5">
@@ -29,12 +29,12 @@ function Summary({ children }: { children?: React.ReactNode }) {
           <dt className="text-ink-500">Shipping</dt>
           <dd className="font-medium text-ink-900">{totals.shipping === 0 ? <span className="text-emerald-600">Free</span> : inr(totals.shipping)}</dd>
         </div>
-        <div className="flex justify-between"><dt className="text-ink-500">GST (18%)</dt><dd className="font-medium text-ink-900">{inr(totals.tax)}</dd></div>
+        <div className="flex justify-between"><dt className="text-ink-500">GST ({commerce.gstRatePercent}%)</dt><dd className="font-medium text-ink-900">{inr(totals.tax)}</dd></div>
         <div className="flex justify-between border-t border-ink-200 pt-3 text-[16px]"><dt className="font-semibold text-ink-900">Total</dt><dd className="font-display font-extrabold text-ink-900">{inr(totals.total)}</dd></div>
       </dl>
 
-      {totals.subtotal > 0 && totals.subtotal < commerceConfig.freeShippingOver && (
-        <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-[12px] text-brand-800">Add {inr(commerceConfig.freeShippingOver - totals.subtotal)} more for free shipping.</p>
+      {totals.subtotal > 0 && totals.subtotal < commerce.freeShippingOverPaise / 100 && (
+        <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-[12px] text-brand-800">Add {inr(commerce.freeShippingOverPaise / 100 - totals.subtotal)} more for free shipping.</p>
       )}
 
       <div className="mt-4">
@@ -45,7 +45,7 @@ function Summary({ children }: { children?: React.ReactNode }) {
           </div>
         ) : (
           <form
-            onSubmit={(e) => { e.preventDefault(); if (applyCoupon(code)) setCode('') }}
+            onSubmit={(e) => { e.preventDefault(); void applyCoupon(code).then((ok) => ok && setCode('')) }}
             className="flex gap-2"
           >
             <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Coupon code" aria-label="Coupon code" className="h-9 min-w-0 flex-1 rounded-lg border border-ink-200 px-3 text-[13px] uppercase focus:border-brand-500 focus:outline-none" />
@@ -69,7 +69,7 @@ function Summary({ children }: { children?: React.ReactNode }) {
 
 export function CartPage() {
   useDocumentTitle('Cart')
-  const { lines, setQty, remove, totals, clear } = useCart()
+  const { lines, setQty, remove, totals, clear, productFor } = useCart()
   const toast = useToast()
 
   return (
@@ -88,7 +88,7 @@ export function CartPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-3">
             {lines.map((l) => {
-              const p = productById(l.productId)
+              const p = productFor(l.productId)
               if (!p) return null
               return (
                 <Card key={l.id} className="flex flex-wrap gap-4 p-4 sm:flex-nowrap">
@@ -111,8 +111,8 @@ export function CartPage() {
                         <button aria-label="Increase quantity" onClick={() => setQty(l.id, l.qty + 1)} className="p-2 text-ink-600 hover:bg-ink-50"><Plus className="size-3.5" /></button>
                       </div>
                       <div className="text-right">
-                        <p className="font-display text-[17px] font-extrabold text-ink-900">{inr(p.price * l.qty)}</p>
-                        <p className="text-[12px] text-ink-400">{inr(p.price)} each</p>
+                        <p className="font-display text-[17px] font-extrabold text-ink-900">{inr((p.pricePaise / 100) * l.qty)}</p>
+                        <p className="text-[12px] text-ink-400">{inr(p.pricePaise / 100)} each</p>
                       </div>
                     </div>
                   </div>
@@ -137,7 +137,7 @@ const steps = ['Contact', 'Shipping', 'Payment'] as const
 
 export function CheckoutPage() {
   useDocumentTitle('Checkout')
-  const { lines, totals, clear } = useCart()
+  const { lines, totals, clear, productFor, commerce } = useCart()
   const { card } = useCard()
   const toast = useToast()
   const [step, setStep] = useState(0)
@@ -260,7 +260,7 @@ export function CheckoutPage() {
                   <Input label="PIN code" value={f.pincode} error={errors.pincode} onChange={set('pincode')} placeholder="560038" inputMode="numeric" maxLength={6} />
                 </div>
                 <Textarea label="Delivery notes (optional)" value={f.notes} onChange={set('notes')} className="[&_textarea]:min-h-16" placeholder="Landmark, preferred delivery time" />
-                <div className="rounded-xl bg-ink-50 p-4 text-[13px] text-ink-600">Shipping across India · Free over {inr(commerceConfig.freeShippingOver)} · Delivery in 4–6 working days after proofing.</div>
+                <div className="rounded-xl bg-ink-50 p-4 text-[13px] text-ink-600">Shipping across India · Free over {inr(commerce.freeShippingOverPaise / 100)} · Delivery in 4–6 working days after proofing.</div>
               </div>
             )}
 
@@ -310,11 +310,11 @@ export function CheckoutPage() {
           <Summary />
           <div className="mt-4 space-y-2">
             {lines.map((l) => {
-              const p = productById(l.productId)
+              const p = productFor(l.productId)
               return p ? (
                 <div key={l.id} className="flex items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-[13px]">
                   <span className="min-w-0 flex-1 truncate text-ink-700">{p.name} × {l.qty}</span>
-                  <span className="font-semibold text-ink-900">{inr(p.price * l.qty)}</span>
+                  <span className="font-semibold text-ink-900">{inr((p.pricePaise / 100) * l.qty)}</span>
                 </div>
               ) : null
             })}
