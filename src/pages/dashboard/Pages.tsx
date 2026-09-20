@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CreditCard, Download, ExternalLink, Eye, Inbox, LifeBuoy, MessageCircle, Package, Palette, Phone, QrCode, Search, Send, Trash2, Truck } from 'lucide-react'
 import { Button, ButtonLink } from '@/components/ui/Button'
@@ -9,12 +9,13 @@ import { Input, Select, Switch, Textarea } from '@/components/ui/Form'
 import { PhoneFrame } from '@/components/card/PhoneFrame'
 import { DigitalCardPreview } from '@/components/card/DigitalCardPreview'
 import { QRImage } from '@/components/card/QRImage'
-import { invoices, leads, orders } from '@/data/dashboard'
+import { invoices, leads } from '@/data/dashboard'
 import { adminTickets } from '@/data/admin'
 import { plans } from '@/data/commerce'
 import { useCard } from '@/store/card'
 import { useAuth } from '@/store/auth'
 import { useMockQuery } from '@/hooks/useMockQuery'
+import { orderApi, type ApiOrder } from '@/services/ownerApi'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useToast } from '@/components/ui/Toast'
 import { inr, reviewUrl } from '@/lib/format'
@@ -160,19 +161,25 @@ export function Leads() {
 
 export function Orders() {
   useDocumentTitle('Orders')
-  const { status, retry } = useMockQuery(orders, { delay: 500 })
-  const [open, setOpen] = useState<(typeof orders)[number] | null>(null)
-  const rows = status === 'empty' ? [] : orders
+  const [orders, setOrders] = useState<ApiOrder[]>([])
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [open, setOpen] = useState<ApiOrder | null>(null)
 
-  const columns: Column<(typeof orders)[number]>[] = [
-    { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold text-ink-900">{r.id}</span> },
-    { key: 'items', header: 'Items', cell: (r) => r.items, hideBelow: 'sm' },
-    { key: 'date', header: 'Placed', cell: (r) => <span className="text-ink-500">{r.date}</span>, hideBelow: 'md' },
-    { key: 'total', header: 'Total', cell: (r) => <span className="font-semibold text-ink-900">{inr(r.total)}</span> },
-    { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+  const load = useCallback(() => {
+    setState('loading')
+    orderApi.mine().then((o) => { setOrders(o); setState('ready') }).catch(() => setState('error'))
+  }, [])
+  useEffect(load, [load])
+
+  const columns: Column<ApiOrder>[] = [
+    { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold text-ink-900">{r.reference}</span> },
+    { key: 'items', header: 'Items', cell: (r) => r.items.map((i) => `${i.product.name} × ${i.quantity}`).join(', '), hideBelow: 'sm' },
+    { key: 'date', header: 'Placed', cell: (r) => <span className="text-ink-500">{new Date(r.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>, hideBelow: 'md' },
+    { key: 'total', header: 'Total', cell: (r) => <span className="font-semibold text-ink-900">{inr(r.totalPaise / 100)}</span> },
+    { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status.replace('_', ' ').toLowerCase()} /> },
   ]
 
-  if (status === 'error') return <ErrorState onRetry={retry} />
+  if (state === 'error') return <ErrorState onRetry={load} />
 
   return (
     <div className="space-y-6">
@@ -180,46 +187,66 @@ export function Orders() {
       <Card>
         <DataTable
           columns={columns}
-          rows={rows}
-          loading={status === 'loading'}
+          rows={orders}
+          loading={state === 'loading'}
           rowKey={(r) => r.id}
           onRowClick={setOpen}
           empty={<EmptyState icon={<Package className="size-5" />} title="No orders yet" description="Order printed QR cards, NFC cards or table stands for your counter." action={<ButtonLink to="/dashboard/store" size="sm">Browse the store</ButtonLink>} />}
         />
       </Card>
 
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `Order ${open.id}` : ''} description={open?.date} footer={<Button variant="secondary" onClick={() => setOpen(null)}>Close</Button>}>
+      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? `Order ${open.reference}` : ''} description={open ? new Date(open.placedAt).toLocaleString('en-IN') : ''} footer={<Button variant="secondary" onClick={() => setOpen(null)}>Close</Button>}>
         {open && (
           <div className="space-y-5">
             <div className="flex items-center justify-between rounded-xl bg-ink-50 p-4">
               <div>
                 <p className="text-[13px] text-ink-500">Status</p>
-                <div className="mt-1"><StatusBadge status={open.status} /></div>
+                <div className="mt-1"><StatusBadge status={open.status.replace('_', ' ').toLowerCase()} /></div>
               </div>
               <div className="text-right">
-                <p className="text-[13px] text-ink-500">Total paid</p>
-                <p className="font-display text-xl font-bold text-ink-900">{inr(open.total)}</p>
+                <p className="text-[13px] text-ink-500">Total</p>
+                <p className="font-display text-xl font-bold text-ink-900">{inr(open.totalPaise / 100)}</p>
               </div>
             </div>
-            <div>
-              <p className="text-[13px] font-semibold text-ink-700">Items</p>
-              <p className="mt-1 text-[14px] text-ink-600">{open.items}</p>
-            </div>
-            {open.tracking ? (
+
+            <ul className="divide-y divide-ink-100 rounded-xl border border-ink-200">
+              {open.items.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold text-ink-900">{i.product.name}</p>
+                    <p className="text-[12px] text-ink-500">{i.businessName || '—'} · {i.finish} · {i.colour}</p>
+                  </div>
+                  <span className="shrink-0 text-[13px] text-ink-600">{i.quantity} × {inr(i.unitPricePaise / 100)}</span>
+                </li>
+              ))}
+            </ul>
+
+            <dl className="space-y-1.5 text-[13px]">
+              <div className="flex justify-between"><dt className="text-ink-500">Subtotal</dt><dd>{inr(open.subtotalPaise / 100)}</dd></div>
+              {open.discountPaise > 0 && <div className="flex justify-between text-emerald-600"><dt>Discount {open.coupon ? `(${open.coupon.code})` : ''}</dt><dd>−{inr(open.discountPaise / 100)}</dd></div>}
+              <div className="flex justify-between"><dt className="text-ink-500">Shipping</dt><dd>{open.shippingPaise === 0 ? 'Free' : inr(open.shippingPaise / 100)}</dd></div>
+              <div className="flex justify-between"><dt className="text-ink-500">GST</dt><dd>{inr(open.taxPaise / 100)}</dd></div>
+            </dl>
+
+            {open.trackingNumber ? (
               <div className="flex items-center gap-3 rounded-xl border border-ink-200 p-4">
                 <Truck className="size-5 text-brand-600" />
                 <div>
-                  <p className="text-[13px] font-semibold text-ink-900">Tracking</p>
-                  <p className="font-mono text-[13px] text-ink-600">{open.tracking}</p>
+                  <p className="text-[13px] font-semibold text-ink-900">{open.shippingProvider ?? 'Tracking'}</p>
+                  <p className="font-mono text-[13px] text-ink-600">{open.trackingNumber}</p>
                 </div>
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-ink-200 p-4 text-center text-[13px] text-ink-500">Tracking appears once your order ships.</p>
             )}
-            <div className="flex items-start gap-3 rounded-xl bg-brand-50 p-4 text-[13px] leading-relaxed text-brand-900">
-              <QrCode className="mt-0.5 size-4 shrink-0" />
-              Every card in this order points to {reviewUrl('')}{'{your-slug}'} — update your card anytime without reprinting.
-            </div>
+
+            {open.address && (
+              <p className="text-[13px] leading-relaxed text-ink-600">
+                <span className="font-semibold text-ink-800">Shipping to</span><br />
+                {open.address.name} · {open.address.phone}<br />
+                {open.address.line1}, {open.address.city}, {open.address.state} {open.address.pincode}
+              </p>
+            )}
           </div>
         )}
       </Modal>

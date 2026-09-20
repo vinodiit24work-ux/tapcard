@@ -12,6 +12,7 @@ import { publicRouter } from './routes/public.routes.js'
 import { analyticsRouter } from './routes/analytics.routes.js'
 import { reviewRouter } from './routes/review.routes.js'
 import { requestRouter } from './routes/request.routes.js'
+import { orderRouter, adminOrderRouter } from './routes/order.routes.js'
 
 export const app = express()
 
@@ -60,7 +61,9 @@ app.use('/api/auth', authRouter)
 app.use('/api/cards', cardRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/reviews', reviewRouter)
+app.use('/api/orders', orderRouter)
 app.use('/api/admin/requests', requestRouter)
+app.use('/api/admin/orders', adminOrderRouter)
 app.use('/api/public', publicRouter)
 
 app.use(notFound)

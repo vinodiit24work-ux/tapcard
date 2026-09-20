@@ -8,6 +8,7 @@ import { Input, Segmented, Select, Textarea } from '@/components/ui/Form'
 import { Logo } from '@/components/ui/Logo'
 
 import { useCart } from '@/store/cart'
+import { orderApi } from '@/services/ownerApi'
 import { useCard } from '@/store/card'
 import { useToast } from '@/components/ui/Toast'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -137,12 +138,13 @@ const steps = ['Contact', 'Shipping', 'Payment'] as const
 
 export function CheckoutPage() {
   useDocumentTitle('Checkout')
-  const { lines, totals, clear, productFor, commerce } = useCart()
+  const { lines, totals, clear, productFor, commerce, coupon } = useCart()
   const { card } = useCard()
   const toast = useToast()
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  const [error, setError] = useState('')
   const [method, setMethod] = useState<'upi' | 'card' | 'netbanking'>('upi')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
@@ -181,13 +183,38 @@ export function CheckoutPage() {
     if (!validate()) return
     if (step < 2) return setStep(step + 1)
     setBusy(true)
-    setTimeout(() => {
-      const id = `TC-${Math.floor(20500 + Math.random() * 400)}`
-      setBusy(false)
-      setDone(id)
-      clear()
-      toast('Order placed')
-    }, 1200)
+    setError('')
+    orderApi
+      .create({
+        items: lines.map((l) => ({
+          sku: l.productId,
+          quantity: l.qty,
+          businessName: l.businessName,
+          finish: l.finish,
+          colour: l.color,
+          notes: l.notes || undefined,
+        })),
+        address: {
+          name: f.name,
+          phone: f.phone,
+          line1: f.address,
+          city: f.city,
+          state: f.state,
+          pincode: f.pincode,
+          country: 'India',
+        },
+        email: f.email,
+        gstin: f.gstin || undefined,
+        couponCode: coupon ?? undefined,
+        notes: f.notes || undefined,
+      })
+      .then((order) => {
+        setDone(order.reference)
+        clear()
+        toast('Order placed')
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false))
   }
 
   if (done)
@@ -196,7 +223,7 @@ export function CheckoutPage() {
         <Card className="w-full max-w-lg p-8 text-center">
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Check className="size-7" /></div>
           <h1 className="mt-5 font-display text-2xl font-extrabold text-ink-900">Order confirmed</h1>
-          <p className="mt-2 text-[15px] text-ink-500">Order <span className="font-mono font-semibold text-ink-800">{done}</span> is in. We have emailed your GST invoice to {f.email || 'your inbox'}.</p>
+          <p className="mt-2 text-[15px] text-ink-500">Order <span className="font-mono font-semibold text-ink-800">{done}</span> is in. We will confirm payment and start production once that is settled.</p>
           <div className="mt-6 rounded-xl bg-ink-50 p-4 text-left text-[13px] leading-relaxed text-ink-600">
             <p className="font-semibold text-ink-800">What happens next</p>
             <p className="mt-1.5">Our team proofs your design, prints your cards and ships them in 4–6 working days. You can follow the status on your Orders page.</p>
@@ -292,15 +319,17 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[13px] leading-relaxed text-amber-900">
                   <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                  <span>This is a mock payment screen for Phase 1. Razorpay is integrated in Phase 3, where every payment is verified server-side before an order is marked paid.</span>
+                  <span>Your order is created and saved now, but stays <strong>unpaid</strong> until Razorpay is connected — no card details are taken on this screen, and nothing is charged.</span>
                 </div>
               </div>
             )}
 
+            {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-700">{error}</p>}
+
             <div className="mt-6 flex items-center justify-between gap-3">
               <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)} icon={<ArrowLeft className="size-4" />}>Back</Button>
               <Button size="lg" loading={busy} onClick={next} icon={step === 2 ? <Lock className="size-4" /> : undefined}>
-                {step === 2 ? `Pay ${inr(totals.total)}` : 'Continue'}
+                {step === 2 ? `Place order · ${inr(totals.total)}` : 'Continue'}
               </Button>
             </div>
           </Card>

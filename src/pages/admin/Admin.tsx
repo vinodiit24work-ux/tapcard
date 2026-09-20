@@ -1,14 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Ban, Building2, CheckCircle2, CreditCard, Download, ExternalLink, IndianRupee, LifeBuoy, Package, Percent, Plus, Search, Settings as SettingsIcon, ShieldCheck, Ticket, TrendingUp, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, Badge, StatusBadge } from '@/components/ui/Card'
 import { DataTable, PageHeader, type Column } from '@/components/ui/Table'
-import { EmptyState, Modal } from '@/components/ui/Feedback'
+import { EmptyState, ErrorState, Modal } from '@/components/ui/Feedback'
 import { Input, Segmented, Select, Switch, Textarea } from '@/components/ui/Form'
 import { StatCard } from '@/components/ui/Stat'
 import { RevenueBars } from '@/components/charts/Charts'
-import { adminBusinesses, adminCoupons, adminOrders, adminPayments, adminRevenue, adminStats, adminTemplates, adminTickets, adminUsers } from '@/data/admin'
+import { adminBusinesses, adminCoupons, adminPayments, adminRevenue, adminStats, adminTemplates, adminTickets, adminUsers } from '@/data/admin'
+import { adminOrderApi, type ApiOrder } from '@/services/ownerApi'
 import { plans, products } from '@/data/commerce'
 import { useMockQuery } from '@/hooks/useMockQuery'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -54,6 +55,10 @@ export function AdminOverview() {
   useDocumentTitle('Admin · Overview')
   const { status } = useMockQuery(adminStats, { delay: 500 })
   const loading = status === 'loading'
+  const [recent, setRecent] = useState<ApiOrder[]>([])
+  useEffect(() => {
+    adminOrderApi.list().then((r) => setRecent(r.orders.slice(0, 5))).catch(() => setRecent([]))
+  }, [])
   const icons = [<Users key="u" className="size-4" />, <Building2 key="b" className="size-4" />, <IndianRupee key="r" className="size-4" />, <Package key="o" className="size-4" />]
 
   return (
@@ -111,14 +116,15 @@ export function AdminOverview() {
         <CardHeader title="Latest orders" action={<Link to="/admin/orders" className="text-[13px] font-medium text-brand-700 hover:underline">View all →</Link>} />
         <DataTable
           columns={[
-            { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.id}</span> },
-            { key: 'c', header: 'Customer', cell: (r) => r.customer },
-            { key: 'i', header: 'Items', cell: (r) => r.items, hideBelow: 'md' },
-            { key: 't', header: 'Total', cell: (r) => <span className="font-semibold">{inr(r.total)}</span> },
-            { key: 's', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+            { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.reference}</span> },
+            { key: 'c', header: 'Customer', cell: (r) => r.user?.name ?? '—' },
+            { key: 'i', header: 'Items', cell: (r) => r.items.map((i) => `${i.product.name} × ${i.quantity}`).join(', '), hideBelow: 'md' },
+            { key: 't', header: 'Total', cell: (r) => <span className="font-semibold">{inr(r.totalPaise / 100)}</span> },
+            { key: 's', header: 'Status', cell: (r) => <StatusBadge status={r.status.replace('_', ' ').toLowerCase()} /> },
           ]}
-          rows={adminOrders.slice(0, 5)}
+          rows={recent}
           rowKey={(r) => r.id}
+          empty={<EmptyState icon={<Package className="size-5" />} title="No orders yet" />}
         />
       </Card>
     </div>
@@ -221,68 +227,126 @@ export function AdminBusinesses() {
   )
 }
 
-const orderStatuses = ['Pending', 'Paid', 'Design Review', 'Production', 'Shipped', 'Delivered', 'Cancelled', 'Refunded']
-
 export function AdminOrders() {
+  useDocumentTitle('Admin · Orders')
   const toast = useToast()
-  const [rows, setRows] = useState(adminOrders)
-  const [sel, setSel] = useState<(typeof adminOrders)[number] | null>(null)
+  const [orders, setOrders] = useState<ApiOrder[]>([])
+  const [revenue, setRevenue] = useState(0)
+  const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [sel, setSel] = useState<ApiOrder | null>(null)
   const [status, setStatus] = useState('')
   const [tracking, setTracking] = useState('')
+  const [provider, setProvider] = useState('')
 
-  const columns: Column<(typeof adminOrders)[number]>[] = [
-    { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold text-ink-900">{r.id}</span> },
-    { key: 'c', header: 'Customer', cell: (r) => r.customer, hideBelow: 'sm' },
-    { key: 'i', header: 'Items', cell: (r) => r.items, hideBelow: 'md' },
-    { key: 'd', header: 'Date', cell: (r) => <span className="text-ink-500">{r.date}</span>, hideBelow: 'lg' },
-    { key: 't', header: 'Total', cell: (r) => <span className="font-semibold">{inr(r.total)}</span> },
-    { key: 's', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+  const load = useCallback(() => {
+    setState('loading')
+    adminOrderApi
+      .list({ status: statusFilter === 'ALL' ? undefined : statusFilter, q: q || undefined })
+      .then((r) => { setOrders(r.orders); setRevenue(r.revenuePaise); setState('ready') })
+      .catch(() => setState('error'))
+  }, [q, statusFilter])
+  useEffect(load, [load])
+
+  const columns: Column<ApiOrder>[] = [
+    { key: 'id', header: 'Order', cell: (r) => <span className="font-mono text-[13px] font-semibold text-ink-900">{r.reference}</span> },
+    { key: 'c', header: 'Customer', cell: (r) => r.user?.name ?? '—', hideBelow: 'sm' },
+    { key: 'i', header: 'Items', cell: (r) => r.items.map((i) => `${i.product.name} × ${i.quantity}`).join(', '), hideBelow: 'md' },
+    { key: 'd', header: 'Placed', cell: (r) => <span className="text-ink-500">{new Date(r.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>, hideBelow: 'lg' },
+    { key: 't', header: 'Total', cell: (r) => <span className="font-semibold">{inr(r.totalPaise / 100)}</span> },
+    { key: 's', header: 'Status', cell: (r) => <StatusBadge status={r.status.replace('_', ' ').toLowerCase()} /> },
   ]
 
+  if (state === 'error') return <ErrorState onRetry={load} />
+
   return (
-    <>
-      <ListPage
-        title="Orders"
-        description="Production and fulfilment queue."
-        columns={columns}
-        rows={rows}
-        onRowClick={(r) => { setSel(r); setStatus(r.status); setTracking('') }}
-        search={(r, q) => (r.id + r.customer + r.items + r.status).toLowerCase().includes(q)}
-        placeholder="Search order ID, customer or status"
-        empty={<EmptyState icon={<Package className="size-5" />} title="No orders match" />}
-      />
+    <div className="space-y-6">
+      <PageHeader title="Orders" description="Production and fulfilment queue." />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard loading={state === 'loading'} label="Orders" value={orders.length} icon={<Package className="size-4" />} />
+        <StatCard loading={state === 'loading'} label="Confirmed revenue" value={inr(revenue / 100)} icon={<IndianRupee className="size-4" />} />
+        <StatCard loading={state === 'loading'} label="Awaiting payment" value={orders.filter((o) => o.status === 'PENDING').length} icon={<CreditCard className="size-4" />} />
+      </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 p-4">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reference or customer" aria-label="Search orders" className="h-9 w-full rounded-lg border border-ink-200 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100" />
+          </div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status" className="h-9 rounded-lg border border-ink-200 px-3 text-sm">
+            {['ALL', 'PENDING', 'PAID', 'DESIGN_REVIEW', 'PRODUCTION', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'].map((s) => (
+              <option key={s} value={s}>{s === 'ALL' ? 'All statuses' : s.replace('_', ' ')}</option>
+            ))}
+          </select>
+        </div>
+        <DataTable
+          columns={columns}
+          rows={orders}
+          loading={state === 'loading'}
+          rowKey={(r) => r.id}
+          onRowClick={(r) => { setSel(r); setStatus(r.status); setTracking(r.trackingNumber ?? ''); setProvider(r.shippingProvider ?? '') }}
+          empty={<EmptyState icon={<Package className="size-5" />} title="No orders match" />}
+        />
+      </Card>
+
       <Modal
         open={!!sel}
         onClose={() => setSel(null)}
-        title={sel ? `Order ${sel.id}` : ''}
-        description={sel?.customer}
+        title={sel ? `Order ${sel.reference}` : ''}
+        description={sel?.user?.name}
         footer={
           <>
             <Button variant="secondary" onClick={() => setSel(null)}>Cancel</Button>
             <Button onClick={() => {
-              setRows((rs) => rs.map((r) => (r.id === sel!.id ? { ...r, status } : r)))
-              toast(`${sel!.id} → ${status}${tracking ? ` · tracking ${tracking}` : ''}`)
-              setSel(null)
+              adminOrderApi
+                .update(sel!.id, { status, trackingNumber: tracking || null, shippingProvider: provider || null })
+                .then(() => { toast(`${sel!.reference} updated · audit logged`); setSel(null); load() })
+                .catch((e: Error) => toast(e.message, 'error'))
             }}>Save changes</Button>
           </>
         }
       >
         {sel && (
           <div className="space-y-4">
+            <ul className="divide-y divide-ink-100 rounded-xl border border-ink-200">
+              {sel.items.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <span className="min-w-0 text-[14px]">
+                    <span className="font-semibold text-ink-900">{i.product.name}</span>
+                    <span className="block text-[12px] text-ink-500">{i.businessName || '—'} · {i.finish} · {i.colour}</span>
+                  </span>
+                  <span className="shrink-0 text-[13px]">{i.quantity} × {inr(i.unitPricePaise / 100)}</span>
+                </li>
+              ))}
+            </ul>
             <div className="flex items-center justify-between rounded-xl bg-ink-50 p-4">
-              <span className="text-[14px] text-ink-600">{sel.items}</span>
-              <span className="font-display text-lg font-bold text-ink-900">{inr(sel.total)}</span>
+              <span className="text-[14px] text-ink-600">Total</span>
+              <span className="font-display text-lg font-bold text-ink-900">{inr(sel.totalPaise / 100)}</span>
             </div>
+            {sel.address && (
+              <p className="rounded-xl border border-ink-200 p-4 text-[13px] leading-relaxed text-ink-600">
+                <span className="font-semibold text-ink-800">Ship to</span><br />
+                {sel.address.name} · {sel.address.phone}<br />
+                {sel.address.line1}, {sel.address.city}, {sel.address.state} {sel.address.pincode}
+              </p>
+            )}
             <Select label="Order status" value={status} onChange={(e) => setStatus(e.target.value)}>
-              {orderStatuses.map((s) => <option key={s}>{s}</option>)}
+              {['PENDING', 'PAID', 'DESIGN_REVIEW', 'PRODUCTION', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'].map((s) => (
+                <option key={s} value={s}>{s.replace('_', ' ')}</option>
+              ))}
             </Select>
-            <Input label="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="DTDC 7X4419203" hint="Added to the customer's order page and emailed to them." />
-            <Textarea label="Internal note (optional)" className="[&_textarea]:min-h-16" placeholder="Visible to admins only" />
-            <p className="rounded-lg bg-ink-50 px-3 py-2 text-[12px] text-ink-500">Status changes are written to the audit log with your admin ID.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input label="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="DTDC 7X4419203" />
+              <Input label="Courier" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="DTDC" />
+            </div>
+            <p className="rounded-lg bg-ink-50 px-3 py-2 text-[12px] text-ink-500">Status changes are written to the audit log and the customer is notified.</p>
           </div>
         )}
       </Modal>
-    </>
+    </div>
   )
 }
 

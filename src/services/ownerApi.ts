@@ -290,3 +290,46 @@ export const catalogueApi = {
   plans: () => api<{ plans: ApiPlan[] }>('/public/plans').then((r) => r.plans),
   settings: () => api<{ settings: { commerce?: CommerceSettings } }>('/public/settings').then((r) => r.settings.commerce ?? null),
 }
+
+/* ----------------------------------------------------------------- orders -- */
+
+export interface ApiOrder {
+  id: string
+  reference: string
+  status: 'PENDING' | 'PAID' | 'DESIGN_REVIEW' | 'PRODUCTION' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED'
+  subtotalPaise: number
+  discountPaise: number
+  shippingPaise: number
+  taxPaise: number
+  totalPaise: number
+  trackingNumber: string | null
+  shippingProvider: string | null
+  gstin: string | null
+  placedAt: string
+  shippedAt: string | null
+  deliveredAt: string | null
+  items: { id: string; quantity: number; unitPricePaise: number; businessName: string; finish: string; colour: string; product: { sku: string; name: string; tech: string; kind: string } }[]
+  address: { name: string; phone: string; line1: string; city: string; state: string; pincode: string } | null
+  coupon: { code: string } | null
+  user?: { name: string; email: string }
+}
+
+export const orderApi = {
+  quote: (items: { sku: string; quantity: number }[], couponCode?: string) =>
+    api<{ subtotalPaise: number; discountPaise: number; shippingPaise: number; taxPaise: number; totalPaise: number }>('/orders/quote', {
+      method: 'POST',
+      body: JSON.stringify({ items, couponCode }),
+    }),
+  create: (body: Record<string, unknown>) => api<{ order: ApiOrder }>('/orders', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.order),
+  mine: () => api<{ orders: ApiOrder[] }>('/orders').then((r) => r.orders),
+  one: (reference: string) => api<{ order: ApiOrder }>(`/orders/${reference}`).then((r) => r.order),
+}
+
+export const adminOrderApi = {
+  list: (q: { status?: string; q?: string } = {}) => {
+    const p = new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])
+    return api<{ orders: ApiOrder[]; counts: Record<string, number>; revenuePaise: number }>(`/admin/orders?${p}`)
+  },
+  update: (id: string, patch: { status?: string; trackingNumber?: string | null; shippingProvider?: string | null }) =>
+    api<{ order: ApiOrder }>(`/admin/orders/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then((r) => r.order),
+}
