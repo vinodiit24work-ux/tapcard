@@ -295,3 +295,59 @@ scanned again, and the edited text appears — with no reprint.
    Owner-side fetches now bypass the cache; customers still get the cached, faster response.
 3. **React style warning** from mixing the `border` shorthand with `borderColor` across
    rerenders, which can drop styles. Replaced with longhand properties.
+
+---
+
+## Live deployment
+
+**https://tapcard-swart.vercel.app** — website and API on one Vercel project, database on Supabase.
+
+Pushing to `main` on GitHub deploys automatically.
+
+### Shape
+
+The Express app is exported from `server/app.ts` and mounted as a single serverless
+function at `api/[...path].ts`. Website and API therefore share one origin, which keeps
+session cookies first-party (`SameSite=Lax`) and removes CORS from the browser path
+entirely. `server/index.ts` remains the local listener.
+
+### Deployment defects found and fixed
+
+Each of these only became visible on a live deploy:
+
+1. **`vercel link` wrote a `services` block into `vercel.json`** and populated it with the
+   build command from `render.yaml`, so Vercel ran Render's build. Deleting `render.yaml`
+   from both disk and git, and removing the injected block, restored normal detection.
+2. **`NODE_ENV=production` made `npm ci` skip devDependencies**, so Prisma's config could
+   not load `dotenv`. `dotenv` is now a runtime dependency and `NODE_ENV` is left to Vercel.
+3. **Node ESM requires explicit file extensions.** Relative imports across `server/` now
+   carry `.js`, and the Prisma client is generated with `importFileExtension = "js"`.
+4. **argon2's native binding was not bundled** into the function — every login would have
+   crashed in production. Replaced with the WASM build (`hash-wasm`), which reads and writes
+   the same PHC hashes, so existing passwords keep working.
+5. **Vercel's catch-all route matched only one path segment**, so `/api/health` worked while
+   `/api/public/plans` returned a platform 404. Fixed with an explicit `/api/:path*` rewrite.
+6. **Trailing slashes bypassed the function** (`/api/cards/` → 404). `trailingSlash: false`
+   canonicalises them.
+7. **The edge cached the review card with a two-minute stale window**, so a suggestion the
+   owner had just edited did not appear on the next scan — which is the entire promise of a
+   permanent QR link. The review endpoint is now `no-store`.
+
+### Frontend now on the API
+
+`src/store/card.tsx` reads and writes the database rather than `localStorage`, and saves
+only the fields that changed rather than replaying every collection. Auth, onboarding, the
+builder, Review Card, Suggested Reviews, Reviews, Analytics and the dashboard home are all
+live. The store, cart, checkout and admin screens still run on mock data.
+
+### Production verification
+
+| Suite | Result |
+|---|---|
+| Final scenario from the brief | **19/19** |
+| Customer review flow | **12/12** |
+| Dashboard round-trip (edit → database → public page) | **8/8** |
+| API integration | **46/47** |
+
+The one remaining API assertion expects an unpublished card to 404 immediately; the CDN
+holds the *contact* card for 30 seconds. The review card is uncached, so it is unaffected.
