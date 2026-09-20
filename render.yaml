@@ -1,0 +1,33 @@
+# Render blueprint for the TapCard API.
+# The database already lives on Supabase, so only the API is defined here.
+services:
+  - type: web
+    name: tapcard-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci && npm run db:generate
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Set these in the Render dashboard — never commit real secrets.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ANALYTICS_SALT
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: PUBLIC_ORIGIN
+        sync: false

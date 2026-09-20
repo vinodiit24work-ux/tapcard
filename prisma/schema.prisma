@@ -1,0 +1,743 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../server/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- identity --
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String    @unique
+  passwordHash      String
+  name              String
+  role              Role      @default(USER)
+  emailVerified     Boolean   @default(false)
+  verifyToken       String?   @unique
+  verifyTokenExpiry DateTime?
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
+  lastLoginAt       DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  businesses    Business[]
+  sessions      Session[]
+  orders        Order[]
+  subscription  Subscription?
+  addresses     Address[]
+  notifications Notification[]
+  tickets       SupportTicket[]
+  auditLogs     AuditLog[]
+  couponUses    CouponRedemption[]
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Refresh/session records. The browser holds an opaque httpOnly cookie; the hash lives here.
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------- business --
+
+model Business {
+  id         String    @id @default(uuid()) @db.Uuid
+  ownerId    String    @db.Uuid
+  name       String
+  category   String
+  tagline    String    @default("")
+  description String   @default("")
+  phone      String    @default("")
+  whatsapp   String    @default("")
+  email      String    @default("")
+  website    String    @default("")
+  address    String    @default("")
+  mapsUrl    String    @default("")
+  reviewUrl  String    @default("")
+  logoUrl    String?
+  coverUrl   String?
+  gstin      String?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  card        DigitalCard?
+  suggestions SuggestedReview[]
+  reviews     Review[]
+  socialLinks SocialLink[]
+  customLinks CustomLink[]
+  services    Service[]
+  menuItems   MenuItem[]
+  hours       OpeningHour[]
+
+  @@index([ownerId])
+  @@index([deletedAt])
+  @@map("businesses")
+}
+
+enum CardStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model DigitalCard {
+  id          String     @id @default(uuid()) @db.Uuid
+  businessId  String     @unique @db.Uuid
+  /// Public identifier used in URLs. Database IDs are never exposed publicly.
+  slug        String     @unique
+  status      CardStatus @default(DRAFT)
+  templateId  String?    @db.Uuid
+  /// Appearance is a small, frequently-rewritten blob; it has no relational queries.
+  appearance  Json
+  bookingUrl  String     @default("")
+  bookingLabel String    @default("Book Appointment")
+  menuUrl     String     @default("")
+  showBranding Boolean   @default(true)
+
+  /// --- Review experience: what a customer sees after scanning or tapping. ---
+  reviewHeadline    String  @default("How was your experience?")
+  reviewDescription String  @default("Your feedback helps us serve you better.")
+  suggestionsTitle  String  @default("Share your experience")
+  ownReviewTitle    String  @default("Write your own review")
+  submitLabel       String  @default("Submit Review")
+  thankYouTitle     String  @default("Thank you!")
+  thankYouMessage   String  @default("Thank you for sharing your experience with us.")
+  googleCtaLabel    String  @default("Review on Google")
+  askForName        Boolean @default(true)
+  /// Secondary business details are available but never block the review.
+  showBusinessInfo  Boolean @default(true)
+  publishedAt DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sections CardSection[]
+  qrCodes  QRCode[]
+  events   AnalyticsEvent[]
+  reviews  Review[]
+  template Template?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([slug])
+  @@index([status])
+  @@map("digital_cards")
+}
+
+enum SectionKind {
+  PROFILE
+  CONTACT
+  SOCIAL
+  MENU
+  SERVICES
+  BOOKING
+  REVIEWS
+  GALLERY
+  LINKS
+}
+
+model CardSection {
+  id       String      @id @default(uuid()) @db.Uuid
+  cardId   String      @db.Uuid
+  kind     SectionKind
+  position Int
+  enabled  Boolean     @default(true)
+
+  card DigitalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, kind])
+  @@index([cardId, position])
+  @@map("card_sections")
+}
+
+model Template {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  name        String
+  category    String
+  description String
+  popular     Boolean  @default(false)
+  published   Boolean  @default(true)
+  /// Default card content applied when a business picks this template.
+  preset      Json
+  useCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cards DigitalCard[]
+
+  @@map("templates")
+}
+
+model SocialLink {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  platform   String
+  handle     String
+  position   Int      @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, platform])
+  @@index([businessId])
+  @@map("social_links")
+}
+
+model CustomLink {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  label      String
+  url        String
+  position   Int      @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("custom_links")
+}
+
+model Service {
+  id          String  @id @default(uuid()) @db.Uuid
+  businessId  String  @db.Uuid
+  name        String
+  description String?
+  price       String?
+  position    Int     @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("services")
+}
+
+model MenuItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  businessId  String  @db.Uuid
+  name        String
+  category    String
+  price       String
+  description String?
+  veg         Boolean @default(true)
+  position    Int     @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("menu_items")
+}
+
+model OpeningHour {
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @db.Uuid
+  /// 0 = Sunday .. 6 = Saturday
+  dayOfWeek  Int
+  opensAt    String
+  closesAt   String
+  closed     Boolean @default(false)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, dayOfWeek])
+  @@map("opening_hours")
+}
+
+/// Review text a business offers as a one-tap starting point. The customer may edit it.
+model SuggestedReview {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  text       String
+  position   Int      @default(0)
+  enabled    Boolean  @default(true)
+  useCount   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reviews  Review[]
+
+  @@index([businessId, position])
+  @@map("suggested_reviews")
+}
+
+enum ReviewSource {
+  /// Written or chosen on our review page.
+  WEBSITE
+  /// Added by the business owner from elsewhere.
+  IMPORTED
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+/// A review a customer actually submitted on our page.
+/// A click through to Google is recorded here as `googleClickedAt` and as an analytics
+/// event — it is never counted as a completed Google review, because we cannot verify one.
+model Review {
+  id             String       @id @default(uuid()) @db.Uuid
+  businessId     String       @db.Uuid
+  cardId         String?      @db.Uuid
+  rating         Int
+  text           String?
+  customerName   String?
+  /// Set when the customer started from a suggestion, even if they then edited it.
+  suggestionId   String?      @db.Uuid
+  /// True when the submitted text differs from the suggestion they started from.
+  edited         Boolean      @default(false)
+  source         ReviewSource @default(WEBSITE)
+  status         ReviewStatus @default(PUBLISHED)
+  device         DeviceKind   @default(OTHER)
+  googleClickedAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  card       DigitalCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  suggestion SuggestedReview? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, rating])
+  @@index([businessId, status])
+  @@map("reviews")
+}
+
+model QRCode {
+  id         String   @id @default(uuid()) @db.Uuid
+  cardId     String   @db.Uuid
+  label      String   @default("Primary")
+  foreground String   @default("#0f1729")
+  background String   @default("#ffffff")
+  margin     Int      @default(2)
+  withLogo   Boolean  @default(false)
+  /// Optional campaign tag so scans from different printed media can be told apart.
+  source     String?
+  scanCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  card DigitalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@map("qr_codes")
+}
+
+// --------------------------------------------------------------- analytics --
+
+enum EventType {
+  PAGE_VIEW
+  REVIEW_PAGE_VIEW
+  RATING_SELECTED
+  SUGGESTION_SELECTED
+  OWN_REVIEW_STARTED
+  REVIEW_SUBMITTED
+  QR_SCAN
+  WHATSAPP_CLICK
+  PHONE_CLICK
+  EMAIL_CLICK
+  WEBSITE_CLICK
+  GOOGLE_REVIEW_CLICK
+  MAP_CLICK
+  MENU_CLICK
+  BOOKING_CLICK
+  SOCIAL_CLICK
+  CUSTOM_LINK_CLICK
+  SAVE_CONTACT
+}
+
+enum DeviceKind {
+  ANDROID
+  IOS
+  DESKTOP
+  OTHER
+}
+
+/// Deliberately coarse: no IP, no user agent string, no cross-site identifier.
+model AnalyticsEvent {
+  id        String     @id @default(uuid()) @db.Uuid
+  cardId    String     @db.Uuid
+  type      EventType
+  device    DeviceKind @default(OTHER)
+  source    String?
+  city      String?
+  country   String?
+  label     String?
+  /// Rotating daily hash used only to approximate unique visitors.
+  visitorKey String?
+  createdAt DateTime   @default(now())
+
+  card DigitalCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, createdAt])
+  @@index([cardId, type, createdAt])
+  @@index([cardId, visitorKey, createdAt])
+  @@map("analytics_events")
+}
+
+// ---------------------------------------------------------------- commerce --
+
+enum PlanTier {
+  FREE
+  PRO
+  BUSINESS
+}
+
+model Plan {
+  id           String   @id @default(uuid()) @db.Uuid
+  tier         PlanTier @unique
+  name         String
+  tagline      String   @default("")
+  /// Stored in paise to avoid floating point money.
+  monthlyPaise Int
+  yearlyPaise  Int
+  cardLimit    Int      @default(1)
+  features     Json
+  popular      Boolean  @default(false)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @unique @db.Uuid
+  planId             String             @db.Uuid
+  status             SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime           @default(now())
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  cancelledAt        DateTime?
+  razorpaySubId      String?            @unique
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([status])
+  @@map("subscriptions")
+}
+
+enum ProductKind {
+  CARD
+  STAND
+  PACK
+}
+
+enum ProductTech {
+  QR
+  NFC
+}
+
+model Product {
+  id             String      @id @default(uuid()) @db.Uuid
+  sku            String      @unique
+  name           String
+  description    String
+  /// Paise. Prices are always read from here, never hardcoded in the app.
+  pricePaise     Int
+  compareAtPaise Int?
+  kind           ProductKind
+  tech           ProductTech
+  material       String
+  badge          String?
+  packSize       Int         @default(1)
+  features       Json
+  active         Boolean     @default(true)
+  position       Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([active])
+  @@map("products")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  DESIGN_REVIEW
+  PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  /// Human-facing reference (TC-20488). Never exposes the UUID.
+  reference     String      @unique
+  userId        String      @db.Uuid
+  status        OrderStatus @default(PENDING)
+  subtotalPaise Int
+  discountPaise Int         @default(0)
+  shippingPaise Int         @default(0)
+  taxPaise      Int         @default(0)
+  totalPaise    Int
+  couponId      String?     @db.Uuid
+  addressId     String?     @db.Uuid
+  gstin         String?
+  notes         String?
+  trackingNumber String?
+  shippingProvider String?
+  placedAt      DateTime    @default(now())
+  paidAt        DateTime?
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id])
+  address  Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  coupon   Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items    OrderItem[]
+  payments Payment[]
+  redemption CouponRedemption?
+
+  @@index([userId, status])
+  @@index([status, placedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String @id @default(uuid()) @db.Uuid
+  orderId       String @db.Uuid
+  productId     String @db.Uuid
+  quantity      Int
+  /// Price captured at purchase time so later price changes never alter past orders.
+  unitPricePaise Int
+  businessName  String
+  finish        String @default("matte")
+  colour        String @default("white")
+  notes         String?
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  orderId           String?       @db.Uuid
+  subscriptionId    String?       @db.Uuid
+  amountPaise       Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  method            String?
+  razorpayOrderId   String?       @unique
+  /// Unique so a replayed webhook can never be processed twice.
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  failureReason     String?
+  refundedPaise     Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("payments")
+}
+
+enum DiscountKind {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id            String       @id @default(uuid()) @db.Uuid
+  code          String       @unique
+  kind          DiscountKind
+  /// Percent (1-100) or paise, depending on `kind`.
+  value         Int
+  minOrderPaise Int          @default(0)
+  maxUses       Int?
+  perUserLimit  Int          @default(1)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  active        Boolean      @default(true)
+  usedCount     Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  orders      Order[]
+  redemptions CouponRedemption[]
+
+  @@index([active])
+  @@map("coupons")
+}
+
+/// Enforces per-user coupon limits at the database level.
+model CouponRedemption {
+  id        String   @id @default(uuid()) @db.Uuid
+  couponId  String   @db.Uuid
+  userId    String   @db.Uuid
+  orderId   String   @unique @db.Uuid
+  createdAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+model Address {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  name      String
+  phone     String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  country   String   @default("India")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ------------------------------------------------------------------ system --
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  title     String
+  body      String?
+  href      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model SupportTicket {
+  id        String         @id @default(uuid()) @db.Uuid
+  reference String         @unique
+  userId    String         @db.Uuid
+  subject   String
+  message   String
+  status    TicketStatus   @default(OPEN)
+  priority  TicketPriority @default(MEDIUM)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([status, priority])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @db.Uuid
+  fromAdmin Boolean  @default(false)
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+/// Who did what, when. Never stores secrets or payment credentials.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Platform configuration (GST rate, shipping, feature flags) read at runtime.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
